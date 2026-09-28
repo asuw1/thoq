@@ -1,56 +1,78 @@
-# Welcome to your Expo app 👋
+# Thoq
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Letterboxd for cafés and restaurants, starting in Riyadh. You log where you went, Thoq asks a few quick “which was better?” questions to turn that into a score, and uses everyone’s scores to pick where you should go next.
 
-## Get started
+This is the MVP: an Expo (React Native) app that runs on iOS, Android and web, with all data stored on the device. The places and community are **fictional demo data**, there to exercise the recommender until there is a backend.
 
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Run it
 
 ```bash
-npm run reset-project
+npm install
+npm start          # Expo dev server — press i / a / w
+npm test           # recommender, ranking, reducer and geo tests (vitest)
+npm run typecheck
+npm run lint
+npm run build:web  # static web build in dist/
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## What’s in the MVP
 
-### Other setup steps
+| Flow | Where |
+| --- | --- |
+| Onboarding: name, home area, taste (yes / not for me), budget, places you already love | `src/app/onboarding.tsx` |
+| **For you**: time-aware picks (“This morning” / “Tonight”) with filters for coffee/food, open now, distance, budget, and the reasons behind each pick | `src/app/(tabs)/index.tsx` |
+| **Log**: place → reaction → what you had → note, then pairwise comparisons | `src/app/(tabs)/log.tsx`, `src/app/compare.tsx` |
+| Place page: community vs. your (or predicted) score, score distribution, what people order, visits with taste match, similar places | `src/app/place/[id].tsx` |
+| **Feed**: following / everyone, people to follow ranked by taste match, community lists | `src/app/(tabs)/feed.tsx` |
+| Profiles with taste match and “where you differ” | `src/app/user/[id].tsx` |
+| **You**: stats, your taste profile as the recommender sees it, rankings, lists, diary | `src/app/(tabs)/you.tsx` |
+| Lists and want-to-go | `src/app/list/*`, `src/app/save/[id].tsx` |
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+## How scoring works
 
-## Learn more
+Star ratings drift towards 4/5 and stop meaning anything. Thoq doesn’t ask for a number.
 
-To learn more about developing your project with Expo, look at the following resources:
+1. You pick a reaction: **Loved it** (6.7–10), **It was fine** (3.4–6.7) or **Didn’t like it** (0–3.4).
+2. Thoq runs a binary search over your ranked places in that band: “Which was better?” At most ⌈log₂(n+1)⌉ questions (3 questions for 7 places, 4 for 15).
+3. Your score is read off the position. Cafés and restaurants are ranked separately; comparing a flat white to a mandi isn’t useful.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+`src/reco/ranking.ts` (tests: `ranking.test.ts`)
 
-## Join the community
+## How recommendations work
 
-Join our community of developers creating universal apps.
+`src/reco/engine.ts` blends three estimates of “what would you score this?” into a predicted score on the same 0–10 scale:
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- **Taste**: cosine similarity between your tag weights and the place’s tags. Weights start from onboarding; every place you rank above 5 pulls its tags up, below 5 pulls them down.
+- **Similar people**: user-user collaborative filtering. Your agreement with someone is 1 − mean|Δ|/5 on places you both ranked, shrunk when you share few places. Their scores, centred on their own average, predict yours.
+- **Crowd**: the community average with Bayesian shrinkage (prior weight 5), so one 10/10 can’t beat forty 8.5s.
+
+Distance (exponential decay, 4 km scale) and want-to-go then adjust the **order**, not the prediction. A maximal-marginal-relevance pass stops the list from being six near-identical espresso bars. Every signal that moves a place up also becomes a sentence the user reads (“Nora (78% taste match) scored it 9.1”).
+
+Cold start is handled by onboarding: taste answers plus “places you already love”, which become your first ranked places.
+
+## Project layout
+
+```
+src/
+  app/        routes (Expo Router). Screens only; no business logic.
+  domain/     types, vocabulary (tags, areas), seed data, geo/time helpers
+  reco/       ranking + recommender. Pure TypeScript, no React, fully tested
+  store/      reducer (pure, tested) + React provider with AsyncStorage persistence
+  theme/      design tokens
+  ui/         primitives and the shared place row
+```
+
+`reco/` and `store/state.ts` have no React or storage imports, so they can move to a server unchanged.
+
+## Known limits and next steps
+
+In order of what I’d do next:
+
+1. **Backend.** Postgres + PostGIS (for “near me” queries) behind auth; Supabase is the fastest route. Move `recommend()` server-side once the community is larger than a few thousand scores. Persisted state is versioned (`STATE_VERSION`), so a migration path exists.
+2. **Real places data.** Don’t scrape or bulk-store Google Places: its terms restrict storing anything beyond place IDs. Start from Foursquare’s open places dataset or OpenStreetMap, add user submissions and an owner-claim flow.
+3. **Real location.** “From” is a chosen neighbourhood for now (no permission prompt). Add `expo-location` as an option, not a requirement.
+4. **Arabic UI.** Place names already carry Arabic; the interface is English-only. Full RTL needs Arabic strings, `I18nManager`, and an Arabic companion typeface (IBM Plex Sans Arabic pairs with the current type).
+5. **Moderation** of notes and lists before anything is public.
+6. **Recommender evaluation.** Once real data exists, hold out each user’s latest visits and measure hit rate / NDCG before changing weights. The weights in `engine.ts` are reasoned defaults, not tuned values.
+
+Times are Riyadh time (UTC+3, no DST) regardless of the device’s time zone.
