@@ -50,9 +50,23 @@ Docs: https://docs.expo.dev/eas/index.md
 
 Thoq should read like a well-set magazine, not a SaaS template.
 
-- **Palette**: paper, ink and one accent (roasted clay), all in `src/theme/tokens.ts`. Nothing else. The accent is only for the active tab or segment, scores of 9.0+, text links and the “Top pick” label.
+- **Palette** (all in `src/theme/tokens.ts`, nothing else): paper and ink carry every screen. Each supporting colour has one job:
+  - **clay** (`accent`): interaction. Active tab or segment, text links, step numbers, scores of 9.0+.
+  - **olive**: “this is about you”. Why a place was picked, “Similar taste” labels, “Top pick for you”.
+  - **sand**: a surface for the single most important block on a screen (the top pick, the reaction step). One per screen.
+  - **coffee**: a dark band for rare editorial moments (a split decision in the feed). Never more than one on screen.
+  - The sawtooth `Crenellation` edge appears only on the top pick. Don't spread it around, and don't market the app as regional or heritage-themed.
+  - Grey `ink3` is too faint on sand; use `ink2` for metadata inside a `Panel`.
 - **Never**: gradients, glows, blurred blobs, glassmorphism, shadows used as decoration, sparkle or “magic” icons, pill-shaped buttons, coloured status dots, or three identical feature columns.
 - **Type**: Newsreader (serif) for names and titles, IBM Plex Sans for UI, IBM Plex Mono for every number, time, distance and price. Headings are left-aligned; there are no centred hero blocks.
 - **Shape**: 2px corner radius. Primary buttons are ink-filled rectangles; secondary buttons are ink outlines.
 - **Structure**: flat rows separated by hairlines (`PlaceRow`), no cards inside cards. Use asymmetric splits (e.g. 3:2 score columns) instead of equal grids.
 - **Copy**: specific and plain. Say what happens (“Save and compare”), never “Unlock AI-powered insights”. Explain recommendations with their actual reasons.
+
+## Product rules (decided with the founder)
+
+- **Numbers shown to users are ratings, never predictions.** A number out of 10 is always a real score: the community average or the user's own ranking. Match scores, predicted scores and person-to-person taste percentages stay in the backend. People get a plain label (“Similar taste”) at most.
+- **Culture**: never use “Date night” or dating framing. Occasion tags are family gathering, friends, business meeting, solo. No “majlis-style” or “private rooms/booths” tags. Arabic-specific terms (e.g. “shilla”) wait for the Arabic version.
+- Cafés and restaurants are optional filters (`ToggleTabs`), never a forced choice.
+- Sign-in is phone-first (+966) with email as a smaller alternative.
+

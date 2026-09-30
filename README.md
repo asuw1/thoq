@@ -19,21 +19,23 @@ npm run build:web  # static web build in dist/
 
 | Flow | Where |
 | --- | --- |
-| Onboarding: name, home area, taste (yes / not for me), budget, places you already love | `src/app/onboarding.tsx` |
-| **For you**: time-aware picks (“This morning” / “Tonight”) with filters for coffee/food, open now, distance, budget, and the reasons behind each pick | `src/app/(tabs)/index.tsx` |
-| **Log**: place → reaction → what you had → note, then pairwise comparisons | `src/app/(tabs)/log.tsx`, `src/app/compare.tsx` |
-| Place page: community vs. your (or predicted) score, score distribution, what people order, visits with taste match, similar places | `src/app/place/[id].tsx` |
-| **Feed**: following / everyone, people to follow ranked by taste match, community lists | `src/app/(tabs)/feed.tsx` |
-| Profiles with taste match and “where you differ” | `src/app/user/[id].tsx` |
-| **You**: stats, your taste profile as the recommender sees it, rankings, lists, diary | `src/app/(tabs)/you.tsx` |
-| Lists and want-to-go | `src/app/list/*`, `src/app/save/[id].tsx` |
+| Onboarding: phone sign-in (email as an alternative), name, location (GPS, or a neighbourhood as fallback), taste (yes / not for me), budget, and any number of places you’ve been | `src/app/onboarding.tsx` |
+| **For you**: picks for Now (open, or opening within 90 min), Tonight or a chosen hour; Coffee/Food as optional filters; the top pick on a sand panel with its reasons; a prompt to rank places you haven’t ranked yet | `src/app/(tabs)/index.tsx` |
+| **Log**: numbered steps, a calendar that opens on today, then “Which would you rather go back to?” comparisons (max 4, with “Not comparable”) | `src/app/(tabs)/log.tsx`, `src/app/compare.tsx` |
+| Place page: community average, your score, rating spread, what people order, visits, similar places | `src/app/place/[id].tsx` |
+| **Feed**: For you / Following. People-first review posts, plus split decisions, people with similar taste and community lists mixed in | `src/app/(tabs)/feed.tsx` |
+| Profiles: “Similar taste” label and where you differ | `src/app/user/[id].tsx` |
+| **Profile**: stats, taste profile, rankings (and places not ranked yet), lists, diary | `src/app/(tabs)/profile.tsx` |
+| Lists: add places from inside the list, with “Suggested for this list” | `src/app/list/*`, `src/app/save/[id].tsx` |
+
+Only real ratings are shown: the community average and your own scores. Predictions and match scores drive the order but stay out of the UI.
 
 ## How scoring works
 
 Star ratings drift towards 4/5 and stop meaning anything. Thoq doesn’t ask for a number.
 
 1. You pick a reaction: **Loved it** (6.7–10), **It was fine** (3.4–6.7) or **Didn’t like it** (0–3.4).
-2. Thoq runs a binary search over your ranked places in that band: “Which was better?” At most ⌈log₂(n+1)⌉ questions (3 questions for 7 places, 4 for 15).
+2. Thoq runs a binary search over your ranked places in that band: “Which would you rather go back to?” At most ⌈log₂(n+1)⌉ questions, capped at 4. “Not comparable” swaps in a different place.
 3. Your score is read off the position. Cafés and restaurants are ranked separately; comparing a flat white to a mandi isn’t useful.
 
 `src/reco/ranking.ts` (tests: `ranking.test.ts`)
@@ -48,7 +50,7 @@ Star ratings drift towards 4/5 and stop meaning anything. Thoq doesn’t ask for
 
 Distance (exponential decay, 4 km scale) and want-to-go then adjust the **order**, not the prediction. A maximal-marginal-relevance pass stops the list from being six near-identical espresso bars. Every signal that moves a place up also becomes a sentence the user reads (“Nora (78% taste match) scored it 9.1”).
 
-Cold start is handled by onboarding: taste answers plus “places you already love”, which become your first ranked places.
+Cold start is handled by onboarding: taste answers plus places you’ve been. Those start unranked with a provisional mid-band score the recommender learns from, and get ranked later in batches of three.
 
 ## Project layout
 
@@ -70,7 +72,7 @@ In order of what I’d do next:
 
 1. **Backend.** Postgres + PostGIS (for “near me” queries) behind auth; Supabase is the fastest route. Move `recommend()` server-side once the community is larger than a few thousand scores. Persisted state is versioned (`STATE_VERSION`), so a migration path exists.
 2. **Real places data.** Don’t scrape or bulk-store Google Places: its terms restrict storing anything beyond place IDs. Start from Foursquare’s open places dataset or OpenStreetMap, add user submissions and an owner-claim flow.
-3. **Real location.** “From” is a chosen neighbourhood for now (no permission prompt). Add `expo-location` as an option, not a requirement.
+3. **Sign-in backend.** The phone/email code screen is a prototype; no SMS or email is sent yet.
 4. **Arabic UI.** Place names already carry Arabic; the interface is English-only. Full RTL needs Arabic strings, `I18nManager`, and an Arabic companion typeface (IBM Plex Sans Arabic pairs with the current type).
 5. **Moderation** of notes and lists before anything is public.
 6. **Recommender evaluation.** Once real data exists, hold out each user’s latest visits and measure hit rate / NDCG before changing weights. The weights in `engine.ts` are reasoned defaults, not tuned values.

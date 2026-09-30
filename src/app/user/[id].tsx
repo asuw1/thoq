@@ -4,10 +4,10 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { PLACE_BY_ID } from '@/domain/seed-places';
 import type { Kind } from '@/domain/types';
-import { tasteMatch } from '@/reco/engine';
+import { tasteLabel, tasteMatch } from '@/reco/engine';
 import { scoresOf } from '@/reco/ranking';
 import { useStore } from '@/store/provider';
-import { font, space } from '@/theme/tokens';
+import { space } from '@/theme/tokens';
 import { usePalette } from '@/theme/use-palette';
 import { PlaceRow } from '@/ui/place-row';
 import { BackBar, Button, Rule, Score, Screen, SectionLabel, Segmented, Txt } from '@/ui/primitives';
@@ -16,7 +16,7 @@ export default function UserScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const c = usePalette();
-  const { state, dispatch, community, myScores } = useStore();
+  const { state, dispatch, community, myScores, learnScores } = useStore();
   const [kind, setKind] = useState<Kind>('cafe');
 
   const user = community.users.find((u) => u.id === id);
@@ -25,10 +25,11 @@ export default function UserScreen() {
     () => (rankings ? { ...scoresOf(rankings.cafe), ...scoresOf(rankings.restaurant) } : {}),
     [rankings],
   );
-  const match = tasteMatch(myScores, theirScores);
+  const label = tasteLabel(tasteMatch(learnScores, theirScores));
+  const shared = Object.keys(theirScores).filter((pid) => pid in learnScores).length;
 
   /** Where you and they disagree most — the most useful thing a taste match can show. */
-  const shared = useMemo(
+  const differ = useMemo(
     () =>
       Object.keys(theirScores)
         .filter((pid) => pid in myScores)
@@ -63,24 +64,21 @@ export default function UserScreen() {
 
       <View style={[styles.matchRow, { borderTopColor: c.ink, borderBottomColor: c.rule }]}>
         <View style={{ flex: 1 }}>
-          <Txt v="label" tone="ink2">
-            Taste match
+          <Txt v="heading" tone={label ? 'olive' : 'ink2'}>
+            {label ?? (shared >= 2 ? 'Different taste from yours' : 'Not enough in common yet')}
           </Txt>
-          <Txt v="display" tone={match && match.percent >= 75 ? 'accent' : 'ink'} style={{ fontFamily: font.monoMedium }}>
-            {match ? `${match.percent}%` : '—'}
-          </Txt>
-          <Txt v="meta" tone="ink3">
-            {match ? `across ${match.overlap} places you both ranked` : 'needs two places in common'}
+          <Txt v="meta" tone="ink3" style={{ marginTop: 2 }}>
+            {shared} place{shared === 1 ? '' : 's'} you’ve both been to
           </Txt>
         </View>
         <Button kind={following ? 'secondary' : 'primary'} label={following ? 'Following' : 'Follow'} onPress={() => dispatch({ type: 'toggleFollow', userId: user.id })} />
       </View>
 
-      {shared.length ? (
+      {differ.length ? (
         <>
           <SectionLabel right={<Txt v="meta" tone="ink3">YOU · {user.name.toUpperCase()}</Txt>}>Where you differ</SectionLabel>
           <Rule />
-          {shared.slice(0, 4).map((s) => (
+          {differ.slice(0, 4).map((s) => (
             <Pressable
               key={s.pid}
               onPress={() => router.push({ pathname: '/place/[id]', params: { id: s.pid } })}

@@ -9,7 +9,7 @@ export type TagGroup = { id: string; title: string; kind: 'cafe' | 'restaurant' 
 export const TAG_GROUPS: TagGroup[] = [
   {
     id: 'coffee',
-    title: 'Coffee',
+    title: 'Coffee & bakes',
     kind: 'cafe',
     tags: [
       { id: 'pour-over', label: 'Pour-over' },
@@ -18,6 +18,8 @@ export const TAG_GROUPS: TagGroup[] = [
       { id: 'saudi-coffee', label: 'Saudi coffee' },
       { id: 'cold-brew', label: 'Cold brew' },
       { id: 'roastery', label: 'Roasts in-house' },
+      { id: 'pastry', label: 'Pastry' },
+      { id: 'sourdough', label: 'Sourdough' },
     ],
   },
   {
@@ -34,16 +36,18 @@ export const TAG_GROUPS: TagGroup[] = [
       { id: 'seafood', label: 'Seafood' },
       { id: 'grill', label: 'Grill' },
       { id: 'breakfast', label: 'Breakfast' },
+      { id: 'desserts', label: 'Desserts' },
     ],
   },
   {
-    id: 'bakery',
-    title: 'Bakes',
+    id: 'occasion',
+    title: 'Who you go with',
     kind: 'both',
     tags: [
-      { id: 'pastry', label: 'Pastry' },
-      { id: 'sourdough', label: 'Sourdough' },
-      { id: 'desserts', label: 'Desserts' },
+      { id: 'family', label: 'Family gathering' },
+      { id: 'friends', label: 'Friends' },
+      { id: 'business', label: 'Business meeting' },
+      { id: 'solo', label: 'Solo' },
     ],
   },
   {
@@ -55,8 +59,6 @@ export const TAG_GROUPS: TagGroup[] = [
       { id: 'lively', label: 'Lively' },
       { id: 'laptop', label: 'Laptop-friendly' },
       { id: 'outdoor', label: 'Outdoor seating' },
-      { id: 'date', label: 'Date night' },
-      { id: 'family', label: 'Family sections' },
       { id: 'late', label: 'Open late' },
       { id: 'counter', label: 'Counter / bar seating' },
     ],

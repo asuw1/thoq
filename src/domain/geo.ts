@@ -26,6 +26,12 @@ export function isOpenAt(hours: Hours, minutes: number): boolean {
   return minutes >= open || minutes < close;
 }
 
+/** Minutes from `minutes` until the place next opens (0 if open now). */
+export function minutesUntilOpen(hours: Hours, minutes: number): number {
+  if (isOpenAt(hours, minutes)) return 0;
+  return (hours.open - minutes + 1440) % 1440;
+}
+
 export function fmtTime(minutes: number): string {
   const m = ((minutes % 1440) + 1440) % 1440;
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;

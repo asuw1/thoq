@@ -4,14 +4,13 @@ import { buildCommunity } from '../domain/seed-community';
 import { PLACES, PLACE_BY_ID } from '../domain/seed-places';
 import { areaByName } from '../domain/vocabulary';
 import { scoresOf } from './ranking';
-import { agreement, crowdStats, recommend, tasteFit, tasteMatch, type Context, type Me, type Neighbour } from './engine';
+import { agreement, crowdStats, recommend, suggestForList, tasteFit, tasteLabel, tasteMatch, type Context, type Me, type Neighbour } from './engine';
 
 const origin = { ...areaByName('Al Olaya'), name: 'Al Olaya' };
 const ctx = (over: Partial<Context> = {}): Context => ({
   kind: 'any',
   origin,
-  nowMinutes: 20 * 60,
-  openNow: false,
+  openAt: null,
   maxPrice: null,
   maxKm: null,
   ...over,
@@ -53,7 +52,7 @@ describe('crowdStats', () => {
 
 describe('recommend', () => {
   it('respects hard filters', () => {
-    const recs = recommend(PLACES, blank, neighbours, ctx({ kind: 'cafe', maxPrice: 1, openNow: true, nowMinutes: 23 * 60 + 30 }));
+    const recs = recommend(PLACES, blank, neighbours, ctx({ kind: 'cafe', maxPrice: 1, openAt: 23 * 60 + 30 }));
     expect(recs.length).toBeGreaterThan(0);
     for (const r of recs) {
       expect(r.place.kind).toBe('cafe');
@@ -107,6 +106,38 @@ describe('recommend', () => {
     const hater: Me = { ...blank, scores: { 'bunn-station': 0.5, kiln: 1 } };
     expect(predictedFor(hater, 'mirkaz')).toBeLessThan(predictedFor(blank, 'mirkaz'));
     expect(tasteFit({ espresso: -1 }, PLACE_BY_ID.mirkaz)).toBeLessThan(0);
+  });
+});
+
+describe('opening window', () => {
+  it('includes places opening soon only within the grace period', () => {
+    // Dallah House opens 16:00. At 15:00 it is excluded with no grace, included with 90 minutes.
+    const at3 = recommend(PLACES, blank, neighbours, ctx({ openAt: 15 * 60 }), 100);
+    expect(at3.some((r) => r.place.id === 'dallah-house')).toBe(false);
+    const soon = recommend(PLACES, blank, neighbours, ctx({ openAt: 15 * 60, openingSoonMin: 90 }), 100);
+    expect(soon.find((r) => r.place.id === 'dallah-house')!.opensIn).toBe(60);
+  });
+});
+
+describe('taste labels and list suggestions', () => {
+  it('never exposes a number, only a label for close matches', () => {
+    expect(tasteLabel(null)).toBeNull();
+    expect(tasteLabel({ percent: 55 })).toBeNull();
+    expect(tasteLabel({ percent: 72 })).toBe('Similar taste');
+    expect(tasteLabel({ percent: 90 })).toBe('Very similar taste');
+  });
+
+  it('reasons never contain a percentage', () => {
+    const recs = recommend(PLACES, { ...blank, scores: { nabta: 9, ghaf: 8.5, kiln: 4 } }, neighbours, ctx(), 50);
+    for (const r of recs) for (const reason of r.reasons) expect(reason).not.toMatch(/%/);
+  });
+
+  it('suggests similar places not already in the list', () => {
+    const out = suggestForList(['nabta', 'ghaf'], PLACES, {});
+    expect(out.length).toBeGreaterThan(0);
+    expect(out.map((p) => p.id)).not.toContain('nabta');
+    expect(out[0].tags).toContain('pour-over');
+    expect(suggestForList([], PLACES, {})).toEqual([]);
   });
 });
 

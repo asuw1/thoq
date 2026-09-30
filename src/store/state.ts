@@ -1,36 +1,50 @@
 import type { Kind, PlaceList, PriceLevel, Reaction, Visit } from '../domain/types';
 import { PLACE_BY_ID } from '../domain/seed-places';
-import { answer, finish, insertAt, isDone, startSession, type Answer, type RankEntry, type Session } from '../reco/ranking';
+import { answer, BANDS, finish, isDone, startSession, type Answer, type RankEntry, type Session } from '../reco/ranking';
 
 /** Pure state + reducer. No React, no storage — so it can be tested and moved to a server later. */
 
 export const ME = 'me';
-export const STATE_VERSION = 1;
+/** Bump when the stored shape changes; older stored state is discarded. */
+export const STATE_VERSION = 2;
 
-export type Me = { name: string; handle: string; area: string };
+/** Phone is the default sign-in; email is the quieter alternative. */
+export type Account = { method: 'phone' | 'email'; value: string };
+
+export type Me = { name: string; handle: string; account: Account | null };
+
+/** Where distance is measured from: the device location, or a neighbourhood the user picked. */
+export type Origin = { lat: number; lng: number; label: string; source: 'gps' | 'area' };
 
 export type State = {
   version: number;
   onboarded: boolean;
   me: Me;
+  origin: Origin;
   prefs: Record<string, number>;
   maxPrice: PriceLevel | null;
   rankings: Record<Kind, RankEntry[]>;
+  /** Places the user has been to but hasn't placed in their rankings yet (from onboarding). */
+  unranked: RankEntry[];
   visits: Visit[];
   wantToGo: string[];
   lists: PlaceList[];
   following: string[];
-  /** A visit waiting for its comparisons to finish. */
-  pending: { visit: Visit; session: Session } | null;
+  /** A place waiting for its comparisons to finish. `visit` is null when ranking an unranked place. */
+  pending: { placeId: string; reaction: Reaction; visit: Visit | null; session: Session } | null;
 };
+
+export const DEFAULT_ORIGIN: Origin = { lat: 24.6937, lng: 46.6853, label: 'Al Olaya', source: 'area' };
 
 export const initialState: State = {
   version: STATE_VERSION,
   onboarded: false,
-  me: { name: '', handle: '', area: 'Al Olaya' },
+  me: { name: '', handle: '', account: null },
+  origin: DEFAULT_ORIGIN,
   prefs: {},
   maxPrice: null,
   rankings: { cafe: [], restaurant: [] },
+  unranked: [],
   visits: [],
   wantToGo: [],
   lists: [],
@@ -40,8 +54,16 @@ export const initialState: State = {
 
 export type Action =
   | { type: 'hydrate'; state: State }
-  | { type: 'onboard'; me: Me; prefs: Record<string, number>; maxPrice: PriceLevel | null; loved: string[]; today: string }
+  | {
+      type: 'onboard';
+      me: Me;
+      origin: Origin;
+      prefs: Record<string, number>;
+      maxPrice: PriceLevel | null;
+      been: RankEntry[];
+    }
   | { type: 'log'; visit: Omit<Visit, 'id' | 'userId'> }
+  | { type: 'rankNext' }
   | { type: 'answer'; answer: Answer }
   | { type: 'cancelPending' }
   | { type: 'toggleWant'; placeId: string }
@@ -49,7 +71,7 @@ export type Action =
   | { type: 'toggleInList'; listId: string; placeId: string }
   | { type: 'deleteList'; listId: string }
   | { type: 'toggleFollow'; userId: string }
-  | { type: 'setArea'; area: string }
+  | { type: 'setOrigin'; origin: Origin }
   | { type: 'setPrefs'; prefs: Record<string, number>; maxPrice: PriceLevel | null }
   | { type: 'reset' };
 
@@ -57,15 +79,23 @@ function kindOf(placeId: string): Kind {
   return PLACE_BY_ID[placeId]?.kind ?? 'cafe';
 }
 
-function commit(state: State, visit: Visit, session: Session): State {
-  const kind = kindOf(visit.placeId);
+function commit(state: State, pending: NonNullable<State['pending']>, session: Session): State {
+  const kind = kindOf(pending.placeId);
   return {
     ...state,
     rankings: { ...state.rankings, [kind]: finish(state.rankings[kind], session) },
-    visits: [visit, ...state.visits],
-    wantToGo: state.wantToGo.filter((id) => id !== visit.placeId),
+    unranked: state.unranked.filter((e) => e.placeId !== pending.placeId),
+    visits: pending.visit ? [pending.visit, ...state.visits] : state.visits,
+    wantToGo: state.wantToGo.filter((id) => id !== pending.placeId),
     pending: null,
   };
+}
+
+/** Start comparing a place against the user's rankings, committing at once if there's nothing to compare. */
+function begin(state: State, placeId: string, reaction: Reaction, visit: Visit | null): State {
+  const session = startSession(state.rankings[kindOf(placeId)], placeId, reaction);
+  const pending = { placeId, reaction, visit, session };
+  return isDone(session) ? commit(state, pending, session) : { ...state, pending };
 }
 
 let seq = 0;
@@ -77,29 +107,37 @@ export function reducer(state: State, action: Action): State {
       return action.state;
 
     case 'onboard': {
-      // Places the user already loves go straight in, in the order they were picked.
-      let rankings = { cafe: [] as RankEntry[], restaurant: [] as RankEntry[] };
-      const visits: Visit[] = [];
-      for (const placeId of action.loved) {
-        const kind = kindOf(placeId);
-        rankings = { ...rankings, [kind]: insertAt(rankings[kind], { placeId, reaction: 'loved' }, rankings[kind].length) };
-        visits.push({ id: newId('v'), userId: ME, placeId, date: action.today, reaction: 'loved', ordered: [], note: '' });
-      }
-      return { ...state, onboarded: true, me: action.me, prefs: action.prefs, maxPrice: action.maxPrice, rankings, visits };
+      // Places picked during onboarding are "been there, not ranked yet". They inform taste straight
+      // away; the user ranks them later in short batches instead of ordering a long list up front.
+      const seen = new Set<string>();
+      const unranked = action.been.filter((e) => PLACE_BY_ID[e.placeId] && !seen.has(e.placeId) && seen.add(e.placeId));
+      return {
+        ...state,
+        onboarded: true,
+        me: action.me,
+        origin: action.origin,
+        prefs: action.prefs,
+        maxPrice: action.maxPrice,
+        rankings: { cafe: [], restaurant: [] },
+        unranked,
+        visits: [],
+      };
     }
 
     case 'log': {
       const visit: Visit = { ...action.visit, id: newId('v'), userId: ME };
-      const kind = kindOf(visit.placeId);
-      const session = startSession(state.rankings[kind], visit.placeId, visit.reaction);
-      if (isDone(session)) return commit(state, visit, session);
-      return { ...state, pending: { visit, session } };
+      return begin(state, visit.placeId, visit.reaction, visit);
+    }
+
+    case 'rankNext': {
+      const next = state.unranked[0];
+      return next ? begin(state, next.placeId, next.reaction, null) : state;
     }
 
     case 'answer': {
       if (!state.pending) return state;
       const session = answer(state.pending.session, action.answer);
-      if (isDone(session)) return commit(state, state.pending.visit, session);
+      if (isDone(session)) return commit(state, state.pending, session);
       return { ...state, pending: { ...state.pending, session } };
     }
 
@@ -141,8 +179,8 @@ export function reducer(state: State, action: Action): State {
           : [...state.following, action.userId],
       };
 
-    case 'setArea':
-      return { ...state, me: { ...state.me, area: action.area } };
+    case 'setOrigin':
+      return { ...state, origin: action.origin };
 
     case 'setPrefs':
       return { ...state, prefs: action.prefs, maxPrice: action.maxPrice };
@@ -150,6 +188,18 @@ export function reducer(state: State, action: Action): State {
     case 'reset':
       return initialState;
   }
+}
+
+/**
+ * Scores the recommender can learn from: real rankings plus a provisional mid-band score for
+ * places the user has been to but not ranked yet. Never shown to the user as a number.
+ */
+export function learningScores(state: Pick<State, 'unranked'>, ranked: Record<string, number>): Record<string, number> {
+  const out = { ...ranked };
+  for (const e of state.unranked) {
+    if (!(e.placeId in out)) out[e.placeId] = (BANDS[e.reaction].lo + BANDS[e.reaction].hi) / 2;
+  }
+  return out;
 }
 
 /** Accept only state this version understands; anything else starts fresh. */

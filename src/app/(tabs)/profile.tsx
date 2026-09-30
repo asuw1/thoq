@@ -15,28 +15,29 @@ import { usePalette } from '@/theme/use-palette';
 import { PlaceRow } from '@/ui/place-row';
 import { Rule, Score, Screen, SectionLabel, Segmented, TextAction, Txt } from '@/ui/primitives';
 
-export default function You() {
-  const { state, dispatch, myScores } = useStore();
+export default function Profile() {
+  const { state, dispatch, myScores, learnScores } = useStore();
   const router = useRouter();
   const c = usePalette();
   const [kind, setKind] = useState<Kind>('cafe');
   const [confirmReset, setConfirmReset] = useState(false);
 
   const taste = useMemo(() => {
-    const v = tasteVector({ prefs: state.prefs, scores: myScores }, PLACE_BY_ID);
+    const v = tasteVector({ prefs: state.prefs, scores: learnScores }, PLACE_BY_ID);
     const entries = Object.entries(v).filter(([, w]) => Math.abs(w) > 0.05);
     const likes = entries.filter(([, w]) => w > 0).sort((a, b) => b[1] - a[1]).slice(0, 6);
     const dislikes = entries.filter(([, w]) => w < 0).sort((a, b) => a[1] - b[1]).slice(0, 4);
     return { likes, dislikes, max: Math.max(0.01, ...likes.map(([, w]) => w)) };
-  }, [state.prefs, myScores]);
+  }, [state.prefs, learnScores]);
 
   const ranking = state.rankings[kind];
+  const unrankedHere = state.unranked.filter((e) => PLACE_BY_ID[e.placeId]?.kind === kind);
   const scores = scoresOf(ranking);
 
   return (
     <Screen>
       <Txt v="meta" tone="ink3" style={{ marginBottom: space.sm }}>
-        @{state.me.handle} · {state.me.area.toUpperCase()}
+        @{state.me.handle} · {state.origin.label.toUpperCase()}
       </Txt>
       <Txt v="display">{state.me.name}</Txt>
 
@@ -44,16 +45,16 @@ export default function You() {
       <View style={[styles.stats, { borderTopColor: c.ink, borderBottomColor: c.rule }]}>
         <View style={{ flex: 2 }}>
           <Txt v="display" style={{ fontFamily: font.monoMedium }}>
-            {state.visits.length}
+            {state.rankings.cafe.length + state.rankings.restaurant.length + state.unranked.length}
           </Txt>
           <Txt v="label" tone="ink2">
-            Visits logged
+            Places been
           </Txt>
         </View>
         <View style={{ flex: 3, gap: space.xs }}>
           {[
-            ['Cafés ranked', state.rankings.cafe.length],
-            ['Restaurants ranked', state.rankings.restaurant.length],
+            ['Visits logged', state.visits.length],
+            ['Ranked', state.rankings.cafe.length + state.rankings.restaurant.length],
             ['Want to go', state.wantToGo.length],
           ].map(([label, n]) => (
             <View key={label} style={styles.statRow}>
@@ -103,6 +104,22 @@ export default function You() {
       {ranking.map((e, i) => (
         <PlaceRow key={e.placeId} place={PLACE_BY_ID[e.placeId]} rank={i + 1} score={scores[e.placeId]} />
       ))}
+      {unrankedHere.length ? (
+        <>
+          <View style={styles.unrankedHead}>
+            <Txt v="label" tone="ink2">
+              Been, not ranked yet · {unrankedHere.length}
+            </Txt>
+            <TextAction
+              label={`Rank ${Math.min(3, state.unranked.length)}`}
+              onPress={() => router.push({ pathname: '/compare', params: { batch: String(Math.min(3, state.unranked.length)) } })}
+            />
+          </View>
+          {unrankedHere.map((e) => (
+            <PlaceRow key={e.placeId} place={PLACE_BY_ID[e.placeId]} note={reactionLabel(e.reaction)} />
+          ))}
+        </>
+      ) : null}
 
       <SectionLabel right={<TextAction label="New list" onPress={() => router.push('/list/new')} />}>Lists</SectionLabel>
       <Rule />
@@ -172,5 +189,6 @@ const styles = StyleSheet.create({
   statRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
   bar: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.sm },
   listRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', paddingVertical: space.md, borderBottomWidth: StyleSheet.hairlineWidth },
+  unrankedHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: space.xl, marginBottom: space.xs },
   diary: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, borderBottomWidth: StyleSheet.hairlineWidth },
 });

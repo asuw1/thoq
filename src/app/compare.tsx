@@ -1,5 +1,5 @@
-import { useRouter } from 'expo-router';
-import { useEffect, useRef } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { PLACE_BY_ID } from '@/domain/seed-places';
@@ -12,12 +12,12 @@ import { usePalette } from '@/theme/use-palette';
 import { placeMeta } from '@/ui/place-row';
 import { Score, Screen, TextAction, Txt } from '@/ui/primitives';
 
-function Option({ place, caption, onPress }: { place: Place; caption: React.ReactNode; onPress: () => void }) {
+function Option({ place, caption, onPress }: { place: Place; caption: ReactNode; onPress: () => void }) {
   const c = usePalette();
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${place.name} was better`}
+      accessibilityLabel={`Rather go back to ${place.name}`}
       onPress={onPress}
       style={({ pressed }) => [styles.option, { borderColor: pressed ? c.ink : c.rule, backgroundColor: pressed ? c.raised : 'transparent' }]}>
       <Txt v="title">{place.name}</Txt>
@@ -29,50 +29,69 @@ function Option({ place, caption, onPress }: { place: Place; caption: React.Reac
   );
 }
 
+/**
+ * Head-to-head questions for one place. With `?batch=N`, ranks up to N places the user
+ * has been to but not ranked yet, one after another.
+ */
 export default function Compare() {
+  const { batch } = useLocalSearchParams<{ batch?: string }>();
   const { state, dispatch, myScores } = useStore();
   const router = useRouter();
-  const placeIdRef = useRef(state.pending?.visit.placeId ?? null);
   const pending = state.pending;
+  const lastPlace = useRef<string | null>(pending?.placeId ?? null);
+  const batchLeft = useRef(batch ? Math.max(0, Number(batch) || 0) : 0);
+  const cancelled = useRef(false);
 
-  // Session finished (or nothing to compare): show where it landed.
   useEffect(() => {
-    if (pending) return;
-    const id = placeIdRef.current;
-    if (id) router.replace({ pathname: '/place/[id]', params: { id, ranked: '1' } });
-    else router.replace('/');
-  }, [pending, router]);
+    if (pending) {
+      lastPlace.current = pending.placeId;
+      return;
+    }
+    // Batch mode: start the next unranked place. Some commit instantly (nothing to compare
+    // against), which changes state and brings us straight back here for the next one.
+    if (!cancelled.current && batchLeft.current > 0 && state.unranked.length > 0) {
+      batchLeft.current -= 1;
+      dispatch({ type: 'rankNext' });
+      return;
+    }
+    if (batch) {
+      if (router.canGoBack()) router.back();
+      else router.replace('/profile');
+    } else if (lastPlace.current && !cancelled.current) {
+      router.replace({ pathname: '/place/[id]', params: { id: lastPlace.current, ranked: '1' } });
+    } else router.replace('/');
+  }, [pending, state.unranked.length, batch, dispatch, router]);
 
   if (!pending) return null;
-  const newPlace = PLACE_BY_ID[pending.visit.placeId];
+  const newPlace = PLACE_BY_ID[pending.placeId];
   const otherId = pivot(pending.session);
-  if (!otherId) return null;
+  if (!newPlace || !otherId) return null;
   const other = PLACE_BY_ID[otherId];
   const left = remainingQuestions(pending.session);
 
   return (
     <Screen scroll={false}>
       <View style={styles.head}>
-        <Txt v="meta" tone="ink3">
-          {pending.session.asked + 1} OF ≤{pending.session.asked + left} · {reactionLabel(pending.visit.reaction).toUpperCase()}
+        <Txt v="meta" tone="ink3" style={{ flex: 1 }}>
+          {pending.session.asked + 1} OF ≤{pending.session.asked + left} · {reactionLabel(pending.reaction).toUpperCase()}
         </Txt>
         <TextAction
-          label="Discard visit"
+          label={pending.visit ? 'Discard visit' : 'Stop'}
           onPress={() => {
-            placeIdRef.current = null;
+            cancelled.current = true;
             dispatch({ type: 'cancelPending' });
           }}
         />
       </View>
       <Txt v="display" style={{ marginBottom: space.xl }}>
-        Which was better?
+        Which would you rather go back to?
       </Txt>
 
       <Option
         place={newPlace}
         caption={
-          <Txt v="label" tone="accent">
-            Just visited
+          <Txt v="label" tone="olive">
+            {pending.visit ? 'Just visited' : 'Ranking now'}
           </Txt>
         }
         onPress={() => dispatch({ type: 'answer', answer: 'new' })}
@@ -93,8 +112,9 @@ export default function Compare() {
         onPress={() => dispatch({ type: 'answer', answer: 'existing' })}
       />
 
-      <View style={{ marginTop: space.xl }}>
+      <View style={{ flexDirection: 'row', gap: space.xl, marginTop: space.xl }}>
         <TextAction label="Too close to call" onPress={() => dispatch({ type: 'answer', answer: 'tie' })} />
+        <TextAction label="Not comparable" onPress={() => dispatch({ type: 'answer', answer: 'skip' })} />
       </View>
     </Screen>
   );

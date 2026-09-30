@@ -6,6 +6,7 @@ import {
   finish,
   insertAt,
   isDone,
+  MAX_QUESTIONS,
   pivot,
   remainingQuestions,
   scoresOf,
@@ -100,6 +101,30 @@ describe('comparison session', () => {
     const s = startSession([fine('z')], 'x', 'loved');
     expect(isDone(s)).toBe(true);
     expect(finish([fine('z')], s).map((e) => e.placeId)).toEqual(['x', 'z']);
+  });
+
+  it('stops after MAX_QUESTIONS even in a long band', () => {
+    const long = Array.from({ length: 100 }, (_, i) => loved(`p${i}`));
+    let s = startSession(long, 'x', 'loved');
+    while (!isDone(s)) s = answer(s, 'existing');
+    expect(s.asked).toBe(MAX_QUESTIONS);
+    expect(finish(long, s).map((e) => e.placeId)).toContain('x');
+  });
+
+  it('"not comparable" asks about a different place and never repeats it', () => {
+    let s = startSession(ranked, 'x', 'loved');
+    const first = pivot(s)!;
+    s = answer(s, 'skip');
+    expect(isDone(s)).toBe(false);
+    expect(pivot(s)).not.toBe(first);
+    expect(s.skipped).toEqual([first]);
+  });
+
+  it('settles in the middle when everything left is skipped', () => {
+    let s = startSession([loved('a')], 'x', 'loved');
+    s = answer(s, 'skip');
+    expect(isDone(s)).toBe(true);
+    expect(finish([loved('a')], s).map((e) => e.placeId)).toEqual(['x', 'a']);
   });
 
   it('never compares a re-logged place against itself', () => {

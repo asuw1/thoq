@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GUTTER, inputReset, radius, space, type, type TypeVariant } from '../theme/tokens';
 import { usePalette } from '../theme/use-palette';
 
-type Tone = 'ink' | 'ink2' | 'ink3' | 'accent' | 'onInk';
+type Tone = 'ink' | 'ink2' | 'ink3' | 'accent' | 'onInk' | 'olive' | 'onCoffee';
 
 export function Txt({
   v = 'body',
@@ -186,6 +186,43 @@ export function Choice({ label, selected, onPress, detail }: { label: string; se
         </Txt>
       ) : null}
     </Pressable>
+  );
+}
+
+/**
+ * Optional filters in the same underlined-tab style: tap to narrow, tap again to clear.
+ * `null` means no filter.
+ */
+export function ToggleTabs<T extends string>({ items, value, onChange }: { items: { value: T; label: string }[]; value: T | null; onChange: (v: T | null) => void }) {
+  return <Segmented items={items} value={value as T} onChange={(v) => onChange(v === value ? null : v)} />;
+}
+
+/** A sand surface for the single most important thing on a screen. Optional sawtooth top edge. */
+export function Panel({ children, crenellated, style }: { children: ReactNode; crenellated?: boolean; style?: StyleProp<ViewStyle> }) {
+  const c = usePalette();
+  return (
+    <View style={style}>
+      {crenellated ? <Crenellation color={c.sand} /> : null}
+      <View style={{ backgroundColor: c.sand, padding: space.lg }}>{children}</View>
+    </View>
+  );
+}
+
+/** A row of small stepped teeth, like the top of a mud-brick wall. Used sparingly, as an edge. */
+export function Crenellation({ color, tooth = 10 }: { color: string; tooth?: number }) {
+  const [width, setWidth] = useState(0);
+  const count = Math.floor(width / (tooth * 2));
+  const h = tooth / 2;
+  return (
+    <View
+      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+      style={{ height: h, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', overflow: 'hidden' }}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants">
+      {Array.from({ length: count }, (_, i) => (
+        <View key={i} style={{ width: 0, height: 0, borderLeftWidth: h, borderRightWidth: h, borderBottomWidth: h, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: color }} />
+      ))}
+    </View>
   );
 }
 

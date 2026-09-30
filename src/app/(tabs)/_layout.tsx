@@ -12,7 +12,7 @@ const LABELS: Record<string, string> = {
   search: 'Search',
   log: 'Log',
   feed: 'Feed',
-  you: 'You',
+  profile: 'Profile',
 };
 
 /** Text-only tab bar. The active tab gets an accent rule above its label; "Log" is the one filled block. */
@@ -62,7 +62,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="search" />
       <Tabs.Screen name="log" />
       <Tabs.Screen name="feed" />
-      <Tabs.Screen name="you" />
+      <Tabs.Screen name="profile" />
     </Tabs>
   );
 }

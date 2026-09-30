@@ -20,8 +20,8 @@ const PERSONAS: Persona[] = [
     taste: { pastry: 1, sourdough: 0.9, breakfast: 0.7, desserts: 0.6, outdoor: 0.4, espresso: 0.4, burgers: -0.5 } },
   { id: 'u-omar', name: 'Omar', handle: 'omar.k', area: 'KAFD', bio: 'Espresso, then work. Counter seats only.', visits: 14,
     taste: { espresso: 1, counter: 0.8, laptop: 0.7, quiet: 0.4, japanese: 0.5, grill: 0.3, family: -0.4 } },
-  { id: 'u-lama', name: 'Lama', handle: 'lama.eats', area: 'Al Yasmin', bio: 'Date nights and long dinners.', visits: 13,
-    taste: { date: 1, italian: 0.8, levantine: 0.7, outdoor: 0.6, desserts: 0.5, laptop: -0.5, 'cold-brew': 0.2 } },
+  { id: 'u-lama', name: 'Lama', handle: 'lama.eats', area: 'Al Yasmin', bio: 'Long dinners with family and friends.', visits: 13,
+    taste: { family: 0.8, friends: 1, italian: 0.8, levantine: 0.7, outdoor: 0.6, desserts: 0.5, laptop: -0.5, 'cold-brew': 0.2 } },
   { id: 'u-yousef', name: 'Yousef', handle: 'yousef.q', area: 'Diriyah', bio: 'Qahwa, dates and a good majlis.', visits: 12,
     taste: { 'saudi-coffee': 1, saudi: 0.9, family: 0.6, outdoor: 0.6, desserts: 0.4, espresso: -0.3 } },
   { id: 'u-hessa', name: 'Hessa', handle: 'hessa.h', area: 'Al Nakheel', bio: 'Light roasts, quiet corners, long reads.', visits: 14,
@@ -35,7 +35,7 @@ const PERSONAS: Persona[] = [
   { id: 'u-maha', name: 'Maha', handle: 'maha.m', area: 'Hittin', bio: 'Seafood, sunsets, big tables.', visits: 12,
     taste: { seafood: 1, family: 0.7, outdoor: 0.8, levantine: 0.5, grill: 0.5, counter: -0.3 } },
   { id: 'u-sami', name: 'Sami', handle: 'sami.s', area: 'Al Rawdah', bio: 'Cheap, fast, good. In that order.', visits: 13,
-    taste: { burgers: 0.9, saudi: 0.7, late: 0.6, espresso: 0.4, family: 0.4, date: -0.4 } },
+    taste: { burgers: 0.9, saudi: 0.7, late: 0.6, espresso: 0.4, family: 0.4, business: -0.4 } },
 ];
 
 export const SEED_USERS: User[] = PERSONAS.map(({ taste: _t, visits: _v, ...u }) => u);
@@ -72,8 +72,10 @@ const TAG_LINES: Record<string, string[]> = {
   outdoor: ['Sit outside after sunset.', 'Terrace is the move in winter.'],
   late: ['Still full at 1am.', 'Good after a late night.'],
   counter: ['Sit at the bar and watch them work.'],
-  date: ['Dim, calm, good for a long dinner.'],
-  family: ['Family section is spacious.'],
+  family: ['Plenty of room for a big family table.'],
+  friends: ['Good for a group that wants to stay a while.'],
+  business: ['Calm enough to talk business.'],
+  solo: ['Easy to come alone with a book.'],
   pastry: ['Lamination is serious.', 'Get there before 10 for the full case.'],
   sourdough: ['Take a loaf home.'],
   desserts: ['Save room for dessert.'],

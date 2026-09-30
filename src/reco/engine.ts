@@ -1,4 +1,4 @@
-import { distanceKm, isOpenAt } from '../domain/geo';
+import { distanceKm, minutesUntilOpen } from '../domain/geo';
 import type { Kind, Place, PriceLevel } from '../domain/types';
 import { TAG_LABEL } from '../domain/vocabulary';
 
@@ -34,8 +34,10 @@ export type Me = {
 export type Context = {
   kind: Kind | 'any';
   origin: { lat: number; lng: number; name: string };
-  nowMinutes: number;
-  openNow: boolean;
+  /** Show places open at this time (minutes after midnight, Riyadh), or null for any time. */
+  openAt: number | null;
+  /** Also include places opening within this many minutes of `openAt`. */
+  openingSoonMin?: number;
   maxPrice: PriceLevel | null;
   maxKm: number | null;
   includeVisited?: boolean;
@@ -46,6 +48,8 @@ export type Rec = {
   predicted: number;
   rankValue: number;
   km: number;
+  /** Minutes until it opens at `openAt`; 0 when already open. */
+  opensIn: number;
   reasons: string[];
   parts: { taste: number; similar: number | null; crowd: number };
 };
@@ -99,6 +103,14 @@ export function tasteMatch(a: ScoreMap, b: ScoreMap): { percent: number; overlap
   const { sim, overlap } = agreement(a, b);
   if (overlap < 2) return null;
   return { percent: Math.round(50 + 50 * sim), overlap };
+}
+
+/** What the UI says about another person's taste. The number itself stays in the backend. */
+export function tasteLabel(match: { percent: number } | null): string | null {
+  if (!match) return null;
+  if (match.percent >= 80) return 'Very similar taste';
+  if (match.percent >= 70) return 'Similar taste';
+  return null;
 }
 
 const mean = (m: ScoreMap) => {
@@ -191,7 +203,8 @@ export function recommend(
   for (const place of places) {
     if (ctx.kind !== 'any' && place.kind !== ctx.kind) continue;
     if (!ctx.includeVisited && place.id in me.scores) continue;
-    if (ctx.openNow && !isOpenAt(place.hours, ctx.nowMinutes)) continue;
+    const opensIn = ctx.openAt === null ? 0 : minutesUntilOpen(place.hours, ctx.openAt);
+    if (ctx.openAt !== null && opensIn > (ctx.openingSoonMin ?? 0)) continue;
     if (ctx.maxPrice !== null && place.price > ctx.maxPrice) continue;
     const km = distanceKm(ctx.origin, place);
     if (ctx.maxKm !== null && km > ctx.maxKm) continue;
@@ -217,6 +230,7 @@ export function recommend(
       predicted: round1(clamp(predicted, 0, 10)),
       rankValue,
       km,
+      opensIn,
       reasons: explain({ place, v, taste, similar, crowd, km, origin: ctx.origin.name, want: want.has(place.id) }),
       parts: { taste, similar: similar ? similar.value : null, crowd: crowd.shrunk },
     });
@@ -257,7 +271,7 @@ function explain(x: {
   if (x.want) out.push('On your want-to-go list');
   if (x.similar?.voice) {
     const { name, percent, score } = x.similar.voice;
-    out.push(`${name} (${percent}% taste match) scored it ${score.toFixed(1)}`);
+    out.push(`${name}${percent >= 70 ? ', whose taste is close to yours,' : ''} scored it ${score.toFixed(1)}`);
   }
   const liked = x.place.tags
     .filter((t) => (x.v[t] ?? 0) > 0.2)
@@ -266,7 +280,7 @@ function explain(x: {
     .map((t) => TAG_LABEL[t]?.toLowerCase() ?? t);
   if (liked.length && x.taste > 0.15) out.push(`Fits what you rank highly: ${liked.join(', ')}`);
   if (x.crowd.count >= 3) out.push(`${x.crowd.avg.toFixed(1)} average from ${x.crowd.count} people`);
-  out.push(`${x.km < 1 ? '<1' : x.km.toFixed(1)} km from ${x.origin}`);
+  out.push(`${x.km < 1 ? 'Under 1' : x.km.toFixed(1)} km from ${x.origin}`);
   return out;
 }
 
@@ -278,6 +292,19 @@ export function similarPlaces(place: Place, places: Place[], limit = 4): Place[]
     .map((p) => ({ p, s: jaccard(place.tags, p.tags) }))
     .filter((x) => x.s > 0)
     .sort((a, b) => b.s - a.s)
+    .slice(0, limit)
+    .map((x) => x.p);
+}
+
+/** "Suggested for this list": places sharing the most tags with what's already in it, best rated first on ties. */
+export function suggestForList(placeIds: string[], places: Place[], crowd: Record<string, { avg: number }>, limit = 5): Place[] {
+  const inList = places.filter((p) => placeIds.includes(p.id));
+  if (!inList.length) return [];
+  return places
+    .filter((p) => !placeIds.includes(p.id))
+    .map((p) => ({ p, s: inList.reduce((sum, q) => sum + jaccard(p.tags, q.tags), 0) / inList.length }))
+    .filter((x) => x.s > 0.15)
+    .sort((a, b) => b.s - a.s || (crowd[b.p.id]?.avg ?? 0) - (crowd[a.p.id]?.avg ?? 0))
     .slice(0, limit)
     .map((x) => x.p);
 }

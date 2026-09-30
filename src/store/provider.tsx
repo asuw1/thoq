@@ -5,7 +5,7 @@ import { buildCommunity, type SeedCommunity } from '../domain/seed-community';
 import type { Visit } from '../domain/types';
 import type { Neighbour, ScoreMap } from '../reco/engine';
 import { scoresOf } from '../reco/ranking';
-import { initialState, ME, parseStored, reducer, type Action, type State } from './state';
+import { initialState, learningScores, ME, parseStored, reducer, type Action, type State } from './state';
 
 const STORAGE_KEY = 'thoq/state';
 
@@ -13,8 +13,10 @@ type Store = {
   state: State;
   dispatch: (a: Action) => void;
   community: SeedCommunity;
-  /** My scores across both kinds. */
+  /** My ranked scores across both kinds: the only personal numbers the UI shows. */
   myScores: ScoreMap;
+  /** Ranked + provisional scores for unranked places. Feeds the recommender; never displayed. */
+  learnScores: ScoreMap;
   /** Everyone else's scores, for the recommender and taste matches. */
   neighbours: Neighbour[];
   /** Every visit, mine included, newest first. */
@@ -62,6 +64,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const allVisits = [...state.visits, ...community.visits].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
     const names: Record<string, string> = Object.fromEntries(community.users.map((u) => [u.id, u.name]));
     names[ME] = state.me.name || 'You';
+    const learnScores = learningScores(state, myScores);
     const crowd: Store['crowd'] = {};
     for (const m of [myScores, ...neighbours.map((n) => n.scores)]) {
       for (const [placeId, score] of Object.entries(m)) {
@@ -70,7 +73,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         c.count += 1;
       }
     }
-    return { state, dispatch, community, myScores, neighbours, allVisits, crowd, userName: (id) => names[id] ?? 'Someone' };
+    return { state, dispatch, community, myScores, learnScores, neighbours, allVisits, crowd, userName: (id) => names[id] ?? 'Someone' };
   }, [state, community]);
 
   if (!ready) return null;
@@ -81,11 +84,4 @@ export function useStore(): Store {
   const s = useContext(Ctx);
   if (!s) throw new Error('useStore outside StoreProvider');
   return s;
-}
-
-/** Scores for a user id, including me. */
-export function useScoresFor(userId: string): ScoreMap {
-  const { myScores, neighbours } = useStore();
-  if (userId === ME) return myScores;
-  return neighbours.find((n) => n.userId === userId)?.scores ?? {};
 }

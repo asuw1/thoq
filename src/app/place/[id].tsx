@@ -5,8 +5,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { shortDate } from '@/domain/clock';
 import { distanceKm, fmtKm, fmtTime, isOpenAt, riyadhMinutes } from '@/domain/geo';
 import { PLACE_BY_ID, PLACES } from '@/domain/seed-places';
-import { areaByName, PRICE_LABEL, TAG_LABEL } from '@/domain/vocabulary';
-import { recommend, similarPlaces, tasteMatch } from '@/reco/engine';
+import { PRICE_LABEL, TAG_LABEL } from '@/domain/vocabulary';
+import { recommend, similarPlaces, tasteLabel, tasteMatch } from '@/reco/engine';
 import { useStore } from '@/store/provider';
 import { ME } from '@/store/state';
 import { space } from '@/theme/tokens';
@@ -25,10 +25,10 @@ export default function PlaceScreen() {
   const { id, ranked } = useLocalSearchParams<{ id: string; ranked?: string }>();
   const router = useRouter();
   const c = usePalette();
-  const { state, dispatch, myScores, neighbours, allVisits, crowd, userName } = useStore();
+  const { state, dispatch, myScores, learnScores, neighbours, allVisits, crowd, userName } = useStore();
   const place = PLACE_BY_ID[id];
 
-  const origin = areaByName(state.me.area);
+  const origin = useMemo(() => ({ ...state.origin, name: state.origin.source === 'gps' ? 'you' : state.origin.label }), [state.origin]);
   const minutes = riyadhMinutes(new Date());
 
   const everyone = useMemo(() => [{ userId: ME, scores: myScores }, ...neighbours], [myScores, neighbours]);
@@ -36,15 +36,15 @@ export default function PlaceScreen() {
   const visits = allVisits.filter((v) => v.placeId === id);
 
   const rec = useMemo(() => {
-    if (!place || myScores[id] !== undefined) return null;
+    if (!place || learnScores[id] !== undefined) return null;
     return recommend(
       [place],
-      { prefs: state.prefs, scores: myScores, wantToGo: state.wantToGo },
+      { prefs: state.prefs, scores: learnScores, wantToGo: state.wantToGo },
       neighbours,
-      { kind: 'any', origin: { ...origin, name: origin.name }, nowMinutes: minutes, openNow: false, maxPrice: null, maxKm: null },
+      { kind: 'any', origin, openAt: null, maxPrice: null, maxKm: null },
       1,
     )[0];
-  }, [place, id, state.prefs, state.wantToGo, myScores, neighbours, origin, minutes]);
+  }, [place, id, state.prefs, state.wantToGo, learnScores, neighbours, origin]);
 
   const orders = useMemo(() => {
     const tally: Record<string, number> = {};
@@ -115,11 +115,15 @@ export default function PlaceScreen() {
         </View>
         <View style={[styles.youCol, { borderLeftColor: c.rule }]}>
           <Txt v="label" tone="ink2">
-            {mine !== undefined ? 'You' : 'Predicted'}
+            You
           </Txt>
-          <Score value={mine ?? rec?.predicted ?? null} size="lg" muted={mine === undefined} />
+          <Score value={mine ?? null} size="lg" />
           <Txt v="meta" tone="ink3">
-            {mine !== undefined ? `#${kindRank + 1} of ${state.rankings[place.kind].length}` : 'for you'}
+            {mine !== undefined
+              ? `#${kindRank + 1} of ${state.rankings[place.kind].length}`
+              : state.unranked.some((e) => e.placeId === id)
+                ? 'been, not ranked'
+                : 'not been yet'}
           </Txt>
         </View>
       </View>
@@ -199,19 +203,19 @@ export default function PlaceScreen() {
       ) : null}
       {visits.slice(0, 12).map((v) => {
         const theirs = everyone.find((n) => n.userId === v.userId)?.scores[id];
-        const match = v.userId === ME ? null : tasteMatch(myScores, everyone.find((n) => n.userId === v.userId)?.scores ?? {});
+        const label = v.userId === ME ? null : tasteLabel(tasteMatch(learnScores, everyone.find((n) => n.userId === v.userId)?.scores ?? {}));
         return (
           <Pressable
             key={v.id}
-            onPress={() => router.push(v.userId === ME ? '/you' : { pathname: '/user/[id]', params: { id: v.userId } })}
+            onPress={() => router.push(v.userId === ME ? '/profile' : { pathname: '/user/[id]', params: { id: v.userId } })}
             style={({ pressed }) => [styles.visit, { borderBottomColor: c.rule, opacity: pressed ? 0.6 : 1 }]}>
             <View style={styles.visitHead}>
               <Txt v="bodyStrong">
                 {v.userId === ME ? 'You' : userName(v.userId)}
-                {match ? (
-                  <Txt v="meta" tone="ink3">
+                {label ? (
+                  <Txt v="small" tone="olive">
                     {'  '}
-                    {match.percent}% match
+                    {label}
                   </Txt>
                 ) : null}
               </Txt>

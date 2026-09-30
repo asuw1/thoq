@@ -1,8 +1,12 @@
 /**
  * Thoq design tokens.
  *
- * Paper and ink, one accent. The accent (roasted clay) is reserved for
- * the active state, scores worth noticing and links — never decoration.
+ * Paper and ink carry the page. Each other colour has exactly one job:
+ *  - clay:   interaction — active tab, links, the one number worth noticing
+ *  - olive:  "this is about you" — why a place was picked, taste labels
+ *  - sand:   a surface for the one thing on a screen that matters most
+ *  - coffee: a dark band for rare editorial moments (a debate, a year in review)
+ * Never use them for decoration, status dots or categories.
  */
 
 export type Palette = {
@@ -12,8 +16,12 @@ export type Palette = {
   ink2: string; // secondary text
   ink3: string; // tertiary text, metadata
   rule: string; // hairlines
-  accent: string; // the one accent
+  accent: string; // clay: interaction
   onInk: string; // text on ink-filled surfaces
+  olive: string; // personal signals
+  sand: string; // emphasis surface
+  coffee: string; // dark editorial band
+  onCoffee: string; // text on coffee
 };
 
 export const palettes: Record<'light' | 'dark', Palette> = {
@@ -26,6 +34,10 @@ export const palettes: Record<'light' | 'dark', Palette> = {
     rule: '#DAD4C8',
     accent: '#A8401B',
     onInk: '#F5F2EC',
+    olive: '#566236',
+    sand: '#EADFC8',
+    coffee: '#35261B',
+    onCoffee: '#F1E7D6',
   },
   dark: {
     paper: '#151411',
@@ -36,6 +48,10 @@ export const palettes: Record<'light' | 'dark', Palette> = {
     rule: '#2E2B25',
     accent: '#E0784A',
     onInk: '#151411',
+    olive: '#A9B67F',
+    sand: '#2A2419',
+    coffee: '#3B2A1D',
+    onCoffee: '#F1E7D6',
   },
 };
 
