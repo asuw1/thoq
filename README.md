@@ -73,7 +73,7 @@ src/
 In order of what I’d do next:
 
 1. **Backend.** Postgres + PostGIS (for “near me” queries) behind auth; Supabase is the fastest route. Move `recommend()` server-side once the community is larger than a few thousand scores. Persisted state is versioned (`STATE_VERSION`), so a migration path exists.
-2. **Real places data.** Don’t scrape or bulk-store Google Places: its terms restrict storing anything beyond place IDs. Start from Foursquare’s open places dataset or OpenStreetMap, add user submissions and an owner-claim flow.
+2. **Real places data.** Audit tooling is in [`data-tools/`](data-tools/README.md). Don’t scrape or bulk-store Google Places: its terms restrict storing anything beyond place IDs. Start from Foursquare’s open places dataset or OpenStreetMap, add user submissions and an owner-claim flow.
 3. **Sign-in backend.** The phone/email code screen is a prototype; no SMS or email is sent yet.
 4. **Arabic UI.** Place names already carry Arabic; the interface is English-only. Full RTL needs Arabic strings, `I18nManager`, and an Arabic companion typeface (IBM Plex Sans Arabic pairs with the current type).
 5. **Moderation** of notes and lists before anything is public.

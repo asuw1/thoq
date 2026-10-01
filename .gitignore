@@ -41,3 +41,8 @@ example
 # generated native folders
 /ios
 /android
+
+# data audit outputs (never commit fetched place data)
+data-tools/out/
+data-tools/.venv/
+__pycache__/

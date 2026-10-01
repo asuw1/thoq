@@ -153,6 +153,7 @@ thoq/
 │       └── use-palette.ts      ← picks light or dark colours
 │
 ├── assets/images/              ← app icon, splash screen, favicon
+├── data-tools/                 ← Python scripts to audit real place datasets (see its README)
 ├── docs/HOW-IT-WORKS.md        ← this file
 ├── app.json                    ← Expo config: app name, icon, permissions, plugins
 ├── package.json                ← dependencies and npm scripts

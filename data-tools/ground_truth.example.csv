@@ -1,0 +1,3 @@
+name,name_ar,kind,area,status,lat,lng,notes
+Example Roastery,مثال للتحميص,cafe,Al Malqa,open,24.8125,46.6141,Replace these rows with real places you know
+Example Grill,مشويات مثال,restaurant,Al Olaya,closed,24.6950,46.6860,"status: open or closed. lat/lng optional (long-press in Google Maps to copy)"
