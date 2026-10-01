@@ -50,9 +50,6 @@ export type User = {
   bio: string;
 };
 
-/** Best first. Scores are derived from position, never stored. */
-export type Rankings = Record<Kind, string[]>;
-
 export type PlaceList = {
   id: string;
   ownerId: string;

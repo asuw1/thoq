@@ -4,6 +4,8 @@ Letterboxd for cafés and restaurants, starting in Riyadh. You log where you wen
 
 This is the MVP: an Expo (React Native) app that runs on iOS, Android and web, with all data stored on the device. The places and community are **fictional demo data**, there to exercise the recommender until there is a backend.
 
+New to the codebase? Read **[docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md)**: a guided tour of every file, the ranking and recommendation maths, and how data flows through the app.
+
 ## Run it
 
 ```bash
