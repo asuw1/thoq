@@ -24,11 +24,10 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from common import OUT_DIR, write_csv
+from common import OUT_DIR, area_from_address, clean_address, clean_text, split_bilingual, write_csv
 
 FIELDS = ["name", "name_ar", "kind", "area", "status", "lat", "lng", "notes"]
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
-ARABIC = re.compile(r"[؀-ۿ]")
 
 
 def _get(url: str) -> tuple[str, str]:
@@ -129,17 +128,17 @@ def extract_places(data: object) -> list[dict]:
 def to_rows(places: list[dict]) -> list[dict]:
     rows = []
     for p in places:
-        arabic = bool(ARABIC.search(p["name"]))
-        notes = "; ".join(x for x in (p["note"], p["address"]) if x)
+        en, ar = split_bilingual(p["name"])
+        address = clean_address(p["address"], p["name"])
         rows.append({
-            "name": "" if arabic else p["name"],
-            "name_ar": p["name"] if arabic else "",
+            "name": en,
+            "name_ar": ar,
             "kind": "cafe",
-            "area": "",
+            "area": area_from_address(address),
             "status": "open",
             "lat": f"{p['lat']:.7f}",
             "lng": f"{p['lng']:.7f}",
-            "notes": notes,
+            "notes": "; ".join(x for x in (clean_text(p["note"]), address) if x),
         })
     return rows
 

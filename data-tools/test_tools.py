@@ -13,8 +13,9 @@ from pathlib import Path
 
 import duckdb
 
-from audit import best_match, duplicates, name_similarity
-from common import normalize_name
+from audit import NearbyIndex, best_match, duplicates, name_similarity
+from common import area_from_address, clean_address, normalize_name, split_bilingual
+from merge_truth import merge
 from fetch_fsq import kind_of
 from fetch_gmaps_list import extract_places, list_id_from, parse_payload, to_rows
 from fetch_osm import parse
@@ -148,6 +149,58 @@ class GoogleList(unittest.TestCase):
             subprocess.run(cmd, capture_output=True, text=True, cwd=HERE)
             self.assertEqual((Path(tmp) / "gmaps_sample.csv").read_text(encoding="utf-8"), first)  # same seed, same sample
             self.assertEqual(len(first.strip().splitlines()), 6)
+
+
+class Cleaning(unittest.TestCase):
+    def test_split_bilingual(self):
+        cases = {
+            "Lahaj Cafe | لهج": ("Lahaj Cafe", "لهج"),
+            "Markab - مركب": ("Markab", "مركب"),
+            "أوزا كافيه Oaza cafe": ("Oaza cafe", "أوزا كافيه"),
+            "Noma \u200fSpeciality coffee I نوما القيروان": ("Noma Speciality coffee", "نوما القيروان"),
+            "قهوة عُمق 3.1 - UMQ Coffee 3.1": ("UMQ Coffee 3.1", "قهوة عُمق 3.1"),
+            "وهف قهوة مختصة| WHF CAFE": ("WHF CAFE", "وهف قهوة مختصة"),
+            "وَقَار l قهوة مختصة": ("", "وَقَار قهوة مختصة"),
+            "محمصة شجرة الصحراء'": ("", "محمصة شجرة الصحراء"),
+            "Alf\u200e": ("Alf", ""),
+            "CAF LAB I Al Qairawan": ("CAF LAB I Al Qairawan", ""),  # one script: left alone
+        }
+        for raw, expected in cases.items():
+            self.assertEqual(split_bilingual(raw), expected, raw)
+
+    def test_address_and_area(self):
+        a = clean_address("RJ72+2PG Sajiah, Al Malqa, Riyadh 13524", "Sajiah")
+        self.assertEqual(a, "Al Malqa, Riyadh 13524")
+        self.assertEqual(area_from_address(a), "Al Malqa")
+        b = clean_address("Kaffix Cafe, حي, Olaya St, Al Olaya RHOB7573, Riyadh 12222", "Kaffix Cafe")
+        self.assertEqual(area_from_address(b), "Al Olaya")
+        self.assertEqual(area_from_address("7094 الامير طلال, حي الرفيعة, الرياض 12752"), "الرفيعة")
+        self.assertEqual(area_from_address("Al Urubah Rd, Riyadh 12251"), "")
+
+    def test_merge_dedupes_and_keeps_branches(self):
+        existing = [
+            {"name": "Example Roastery", "name_ar": "", "kind": "cafe", "status": "open", "lat": "24.8", "lng": "46.6", "notes": ""},
+            {"name": "Rex Coffee", "name_ar": "مقهى ريكس", "kind": "cafe", "status": "open", "lat": "24.8110", "lng": "46.6461", "notes": "good specialty coffee"},
+            {"name": "GUNBUN", "name_ar": "قن بن", "kind": "restaurant", "status": "closed", "lat": "24.7384", "lng": "46.6461", "notes": ""},
+        ]
+        incoming = [
+            {"name": "", "name_ar": "Rex Coffee | ريكس", "lat": "24.8111", "lng": "46.6462", "notes": "Rex, Al Sahafah, Riyadh 13315"},  # same place
+            {"name": "Rex coffee", "name_ar": "", "lat": "24.7699", "lng": "46.5852", "notes": "Rex coffee, Hittin, Riyadh 13518"},  # other branch
+            {"name": "", "name_ar": "Lahaj Cafe | لهج", "lat": "24.7423", "lng": "46.5808", "notes": "Lahaj Cafe | لهج, Al Faisaliyah, Diriyah 13712"},
+        ]
+        merged, removed, skipped = merge(existing, incoming)
+        self.assertEqual(len(removed), 1)
+        self.assertEqual(len(skipped), 1)
+        names = [(r["name"], r["name_ar"]) for r in merged]
+        self.assertEqual(names, [("Rex Coffee", "مقهى ريكس"), ("GUNBUN", "قن بن"), ("Rex coffee", ""), ("Lahaj Cafe", "لهج")])
+        self.assertEqual(merged[0]["notes"], "good specialty coffee")  # hand-written notes untouched
+        self.assertEqual(merged[3]["area"], "Al Faisaliyah")
+        self.assertEqual(merged[1]["status"], "closed")
+
+    def test_nearby_index_only_returns_close_rows(self):
+        rows = [{"name": "A", "lat": "24.7000", "lng": "46.7000"}, {"name": "B", "lat": "24.7900", "lng": "46.7000"}]
+        near = NearbyIndex(rows).near(24.7005, 46.7004)
+        self.assertEqual([r["name"] for r in near], ["A"])
 
 
 if __name__ == "__main__":

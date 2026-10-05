@@ -9,6 +9,7 @@ The scripts in this folder:
 | `fetch_fsq.py` | Pulls every café and restaurant in Riyadh from **Foursquare OS Places** (Apache-2.0, we may store it) into `out/fsq_riyadh.csv`. |
 | `fetch_osm.py` | Pulls the same from **OpenStreetMap** (ODbL) into `out/osm_riyadh.csv`. |
 | `fetch_gmaps_list.py` | Exports one shared Google Maps list to `out/gmaps_list.csv` in ground-truth format, optionally with a random sample. |
+| `merge_truth.py` | Adds an exported list to `ground_truth.csv`: splits mixed Arabic/English names, cleans notes, fills `area`, removes the template rows and skips places you already have. Backs up first. |
 | `audit.py` | Compares both with your `ground_truth.csv` and writes `out/report.md`. |
 | `test_tools.py` | Offline tests for all of the above. |
 
@@ -64,7 +65,16 @@ Copying coordinates from Google Maps by hand for a private comparison list is fi
 python fetch_gmaps_list.py "https://maps.app.goo.gl/XXXX" --sample 20
 ```
 
-This writes the whole list to `out/gmaps_list.csv` and 20 random places to `out/gmaps_sample.csv`, already in ground-truth columns. Check each sampled place is really open (fix `status`, add `name_ar`), then paste the rows into `ground_truth.csv`.
+This writes the whole list to `out/gmaps_list.csv` (plus 20 random places to `out/gmaps_sample.csv` if you want a smaller set).
+
+To add the list to your ground truth:
+
+```powershell
+python merge_truth.py --dry-run   # see what will be added and which duplicates are skipped
+python merge_truth.py             # do it (your old file is saved as ground_truth.backup.csv)
+```
+
+Every merged place starts as `open`. If you know one has closed, change its `status` to `closed`; closed places are the most valuable rows in the audit.
 
 - **If it says it can't find a list id:** open the link in your browser, wait for the list to load, and pass the full address-bar URL instead.
 - **If it finds no places:** Google changed the format. Re-run with `--dump raw.json` and send me the file.

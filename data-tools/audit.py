@@ -47,12 +47,34 @@ def name_similarity(a: str, b: str) -> float:
     return SequenceMatcher(None, a, b).ratio()
 
 
-def best_match(truth: dict, rows: list[dict]) -> tuple[dict | None, float, float | None]:
+class NearbyIndex:
+    """Buckets rows into ~1 km grid cells so a place is only compared with rows around it.
+    Turns hundreds × tens of thousands of name comparisons into a few dozen per place."""
+
+    CELL = 0.01  # degrees: ~1.1 km of latitude, ~1.0 km of longitude in Riyadh, ≥ SAME_AREA_M
+
+    def __init__(self, rows: list[dict]):
+        self.cells: dict[tuple[int, int], list[dict]] = {}
+        for r in rows:
+            lat, lng = _float(r.get("lat")), _float(r.get("lng"))
+            if lat is not None and lng is not None:
+                self.cells.setdefault(self._key(lat, lng), []).append(r)
+
+    def _key(self, lat: float, lng: float) -> tuple[int, int]:
+        return int(lat // self.CELL), int(lng // self.CELL)
+
+    def near(self, lat: float, lng: float) -> list[dict]:
+        y, x = self._key(lat, lng)
+        return [r for dy in (-1, 0, 1) for dx in (-1, 0, 1) for r in self.cells.get((y + dy, x + dx), [])]
+
+
+def best_match(truth: dict, rows: list[dict], index: NearbyIndex | None = None) -> tuple[dict | None, float, float | None]:
     """Best candidate for a ground-truth place: (row, name score, distance in metres or None)."""
     t_names = [n for n in (truth.get("name", ""), truth.get("name_ar", "")) if n]
     t_lat, t_lng = _float(truth.get("lat")), _float(truth.get("lng"))
+    candidates = index.near(t_lat, t_lng) if index is not None and t_lat is not None and t_lng is not None else rows
     best, best_score, best_dist = None, 0.0, None
-    for r in rows:
+    for r in candidates:
         r_names = [n for n in (r.get("name", ""), r.get("name_ar", ""), r.get("name_en", "")) if n]
         score = max((name_similarity(a, b) for a in t_names for b in r_names), default=0.0)
         if score < WEAK_NAME:
@@ -155,14 +177,22 @@ def main() -> None:
                "| Source | Open places found | Median pin error | Closed places still listed as open |",
                "| --- | --- | --- | --- |"]
         details: dict[str, list[tuple[dict, dict | None, float, float | None]]] = {}
+        by_kind: dict[str, list[str]] = {}
         for label, rows in sources.items():
-            matches = [(t, *best_match(t, rows)) for t in truth]
+            index = NearbyIndex(rows)
+            matches = [(t, *best_match(t, rows, index)) for t in truth]
             details[label] = matches
             found = [m for m in matches if m[1] is not None and m[0] in open_truth]
             dists = sorted(m[3] for m in found if m[3] is not None)
             median = f"{dists[len(dists) // 2]:.0f} m" if dists else "—"
             stale = sum(1 for t, r, _, _ in matches if t in closed_truth and r is not None and not r.get("date_closed"))
             md.append(f"| {label} | {len(found)} / {len(open_truth)} ({_pct(len(found), len(open_truth))}) | {median} | {stale} / {len(closed_truth)} |")
+            for kind, plural in (("cafe", "Cafés"), ("restaurant", "Restaurants")):
+                of_kind = [t for t in open_truth if (t.get("kind") or "cafe").strip().lower() == kind]
+                hit = sum(1 for m in found if (m[0].get("kind") or "cafe").strip().lower() == kind)
+                if of_kind:
+                    by_kind.setdefault(label, []).append(f"{plural} {hit} / {len(of_kind)} ({_pct(hit, len(of_kind))})")
+        md += [""] + [f"- **{label}:** {' · '.join(parts)}" for label, parts in by_kind.items()]
         md += ["", "### Place by place", "", "| Place | Status | " + " | ".join(sources) + " |", "| --- | --- | " + " | ".join("---" for _ in sources) + " |"]
         for i, t in enumerate(truth):
             cells = []
