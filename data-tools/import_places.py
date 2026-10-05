@@ -7,6 +7,7 @@ Steps, in order:
   1. Drop places on the blocklist (catalogue/blocklist.csv) and places Foursquare marks closed.
   2. Map Foursquare's category labels to Thoq categories (catalogue/category_rules.csv). A place can
      have many. Any EXCLUDE rule (bars, shisha, lounges…) removes the place, whatever else it is.
+  2b. Read the name too (catalogue/name_rules.csv): "مندي" adds Saudi, "شيشة" removes the place.
   3. Drop places no rule recognises (not a café or restaurant we'd show). A plain "Restaurant" is kept
      with no category yet; users and owners fill that in later.
   4. Merge duplicates: near-identical names within 50 m. The kept record takes the union of categories.
@@ -57,18 +58,39 @@ def _comment_free(path: Path) -> list[dict]:
     return list(csv.DictReader(lines))
 
 
+ARABIC = re.compile(r"[\u0600-\u06FF]")
+ARABIC_PREFIX = "(?:وال|بال|فال|لل|ال|و|ب|ل|ف)?"
+
+
+def _compile(match: str) -> re.Pattern:
+    """Whole-word regex for one rule. A trailing * means 'word starts with', a leading ^ means 'only at the
+    start of the step'. Arabic rules also allow the prefixes Arabic glues onto words (ال، و، بال…)."""
+    anchored, prefix = match.startswith("^"), match.endswith("*")
+    body = re.escape(match.strip("^*"))
+    if ARABIC.search(body):
+        body = ARABIC_PREFIX + body
+    # (?<!\w) rather than \b so the boundaries also behave next to non-Latin text.
+    return re.compile(("^" if anchored else r"(?<!\w)") + body + ("" if prefix else r"(?!\w)"), re.I)
+
+
 def load_rules(path: Path = CATALOGUE / "category_rules.csv") -> list[tuple[re.Pattern, str]]:
-    """Each rule becomes a whole-word regex. A trailing * means 'word starts with', a leading ^ means
-    'only at the start of the step'."""
-    rules = []
-    for row in _comment_free(path):
-        match, category = row["match"].strip().lower(), row["category"].strip()
-        anchored, prefix = match.startswith("^"), match.endswith("*")
-        body = re.escape(match.strip("^*"))
-        # (?<!\w) rather than \b so the boundaries also behave next to non-Latin text.
-        pattern = ("^" if anchored else r"(?<!\w)") + body + ("" if prefix else r"(?!\w)")
-        rules.append((re.compile(pattern, re.I), category))
-    return rules
+    return [(_compile(row["match"].strip().lower()), row["category"].strip()) for row in _comment_free(path)]
+
+
+def load_name_rules(path: Path = CATALOGUE / "name_rules.csv") -> list[tuple[re.Pattern, str]]:
+    return load_rules(path)
+
+
+def categorise_name(name: str, rules: list[tuple[re.Pattern, str]]) -> tuple[list[str], bool]:
+    """(categories the name implies, excluded?)"""
+    found: list[str] = []
+    for pattern, category in rules:
+        if pattern.search(name):
+            if category == "EXCLUDE":
+                return [], True
+            if category not in found:
+                found.append(category)
+    return found, False
 
 
 def load_categories(path: Path = CATALOGUE / "categories.csv") -> dict[str, dict]:
@@ -118,7 +140,7 @@ def thoq_id(source_id: str) -> str:
 
 # ---------------------------------------------------------------- pipeline
 
-def build(rows: list[dict], rules, catalogue, blocklist: set[str]) -> tuple[list[dict], Counter, dict[str, Counter], list[dict]]:
+def build(rows: list[dict], rules, catalogue, blocklist: set[str], name_rules=()) -> tuple[list[dict], Counter, dict[str, Counter], list[dict]]:
     """Returns (places, excluded-by-reason counts, {"unmapped"|"excluded": label counts}, names to review)."""
     excluded: Counter = Counter()
     unmapped: Counter = Counter()
@@ -139,10 +161,15 @@ def build(rows: list[dict], rules, catalogue, blocklist: set[str]) -> tuple[list
             excluded["bar / shisha / lounge"] += 1
             excluded_labels.update(labels)
             continue
+        from_name, name_excluded = categorise_name(r.get("name", ""), name_rules)
+        if name_excluded:
+            excluded["shisha / cigar / staff room (by name)"] += 1
+            continue
         if not keep:
             excluded["not a café or restaurant"] += 1
             unmapped.update(labels or ["(no label)"])
             continue
+        categories += [c for c in from_name if c not in categories]
         en, ar = split_bilingual(r.get("name", ""))
         if not (en or ar):
             excluded["no name"] += 1
@@ -233,13 +260,14 @@ def main() -> None:
     ap.add_argument("--out", default=str(OUT_DIR / "catalogue"))
     args = ap.parse_args()
 
-    rules, catalogue = load_rules(), load_categories()
-    unknown = {c for _, c in rules if c not in ("EXCLUDE", "KEEP") and c not in catalogue}
-    if unknown:
-        raise SystemExit(f"category_rules.csv uses categories missing from categories.csv: {sorted(unknown)}")
+    rules, name_rules, catalogue = load_rules(), load_name_rules(), load_categories()
+    for file, rs in (("category_rules.csv", rules), ("name_rules.csv", name_rules)):
+        unknown = {c for _, c in rs if c not in ("EXCLUDE", "KEEP") and c not in catalogue}
+        if unknown:
+            raise SystemExit(f"{file} uses categories missing from categories.csv: {sorted(unknown)}")
     blocklist = {row["source_id"] for row in read_csv(CATALOGUE / "blocklist.csv")}
 
-    places, excluded, labels, review = build(read_csv(Path(args.input)), rules, catalogue, blocklist)
+    places, excluded, labels, review = build(read_csv(Path(args.input)), rules, catalogue, blocklist, name_rules)
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)

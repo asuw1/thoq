@@ -99,15 +99,17 @@ What it does, in order:
 1. **Drops** places on `catalogue/blocklist.csv` and places Foursquare marks closed.
 2. **Excludes** bars, shisha and lounges by category. One matching label is enough, even if the place is also labelled a café.
 3. **Maps** Foursquare labels onto Thoq's categories (`catalogue/categories.csv`). A place can have several: a café that bakes and serves breakfast gets all three. A plain "Restaurant" is kept with no category yet.
-4. **Merges** duplicates (near-identical names within 50 m).
-5. Splits Arabic and English names, cleans the address, and decides **ranked with**: café or restaurant, exactly one.
+4. **Reads the name too.** "مندي" or "كبسة" adds Saudi, which Foursquare's labels almost never say. "شيشة", "معسل", "cigar" or "staff lounge" removes the place.
+5. **Merges** duplicates (near-identical names within 50 m).
+6. Splits Arabic and English names, cleans the address, and decides **ranked with**: café or restaurant, exactly one.
 
-You edit three files in `catalogue/`, then re-run:
+You edit four files in `catalogue/`, then re-run:
 
 | File | Edit it when |
 | --- | --- |
 | `categories.csv` | You want to rename, add or remove a Thoq category, or change whether it's ranked with cafés or restaurants. |
 | `category_rules.csv` | A Foursquare label lands in the wrong category, or `summary.md` lists a dropped label that belongs in Thoq. The comments at the top explain the syntax. |
+| `name_rules.csv` | A word in place names should add a category (a dish, "بروست") or remove the place. Arabic rules also match with ال، و، بال… in front. |
 | `blocklist.csv` | One specific place shouldn't be in Thoq. Add its `source_id` (from `review_names.csv` or `places.csv`) and a reason. |
 
 **Check every run:**

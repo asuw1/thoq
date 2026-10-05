@@ -1,0 +1,46 @@
+match,category
+# Rules matched against the place's NAME (English and Arabic), same syntax as category_rules.csv.
+# Foursquare files most mandi and kabsa places as "Middle Eastern" or plain "Restaurant"; their names say what they are.
+# Arabic rules also match with a prefix (ال، و، وال، بال، لل، ب، ل، ف), so "مندي" matches "المندي" and "والمندي".
+# A name category is added to the label categories. EXCLUDE removes the place.
+shisha,EXCLUDE
+hookah,EXCLUDE
+cigar,EXCLUDE
+staff lounge,EXCLUDE
+شيشة,EXCLUDE
+شيشه,EXCLUDE
+معسل,EXCLUDE
+أرجيلة,EXCLUDE
+ارجيلة,EXCLUDE
+مندي,saudi
+مندى,saudi
+mandi,saudi
+كبسة,saudi
+كبسه,saudi
+kabsa,saudi
+مظبي,saudi
+مضبي,saudi
+mathbi,saudi
+حنيذ,saudi
+haneeth,saudi
+مضغوط,saudi
+madghout,saudi
+مدفون,saudi
+madfoon,saudi
+بخاري,saudi
+مقلقل,saudi
+جريش,saudi
+مرقوق,saudi
+مطبق,saudi
+شعبي,saudi
+بروست,chicken
+broast*,chicken
+فول,breakfast
+تميس,breakfast
+فطور,breakfast
+فطاير,bakery
+فطائر,bakery
+معجنات,bakery
+مخبز,bakery
+شاورما,levantine
+شاورمر,levantine

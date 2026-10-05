@@ -19,7 +19,7 @@ from merge_truth import merge
 from fetch_fsq import kind_of
 from fetch_gmaps_list import extract_places, list_id_from, parse_payload, to_rows
 from fetch_osm import fetch, parse
-from import_places import build, categorise, load_categories, load_rules, ranked_with, thoq_id
+from import_places import build, categorise, categorise_name, load_categories, load_name_rules, load_rules, ranked_with, thoq_id
 
 HERE = Path(__file__).parent
 
@@ -106,7 +106,7 @@ class Fetchers(unittest.TestCase):
             res = subprocess.run([sys.executable, str(HERE / "fetch_fsq.py"), "--source", str(pq), "--out", str(out)],
                                  capture_output=True, text=True, cwd=HERE)
             self.assertEqual(res.returncode, 0, res.stderr)
-            rows = list(csv.DictReader(out.open(encoding="utf-8")))
+            rows = list(csv.DictReader(out.read_text(encoding="utf-8").splitlines()))
             self.assertEqual([r["name"] for r in rows], ["Nabta Coffee Lab", "Najd Table"])  # gym and Jeddah dropped
             self.assertEqual(rows[1]["date_closed"], "2024-05-01")
 
@@ -186,7 +186,7 @@ class GoogleList(unittest.TestCase):
             cmd = [sys.executable, str(HERE / "fetch_gmaps_list.py"), "--input", str(raw), "--out", str(out), "--sample", "5"]
             res = subprocess.run(cmd, capture_output=True, text=True, cwd=HERE)
             self.assertEqual(res.returncode, 0, res.stderr)
-            self.assertEqual(len(list(csv.DictReader(out.open(encoding="utf-8")))), 30)
+            self.assertEqual(len(list(csv.DictReader(out.read_text(encoding="utf-8").splitlines()))), 30)
             first = (Path(tmp) / "gmaps_sample.csv").read_text(encoding="utf-8")
             subprocess.run(cmd, capture_output=True, text=True, cwd=HERE)
             self.assertEqual((Path(tmp) / "gmaps_sample.csv").read_text(encoding="utf-8"), first)  # same seed, same sample
@@ -250,14 +250,32 @@ class Catalogue(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.rules, cls.cats = load_rules(), load_categories()
+        cls.rules, cls.cats, cls.names = load_rules(), load_categories(), load_name_rules()
 
     def cat(self, *labels):
         return categorise(list(labels), self.rules)
 
     def test_every_rule_names_a_real_category(self):
-        unknown = {c for _, c in self.rules if c not in ("EXCLUDE", "KEEP") and c not in self.cats}
+        unknown = {c for _, c in self.rules + self.names if c not in ("EXCLUDE", "KEEP") and c not in self.cats}
         self.assertEqual(unknown, set())
+
+    def test_names_add_categories(self):
+        self.assertEqual(categorise_name("مطعم مندي الشرق", self.names), (["saudi"], False))
+        self.assertEqual(categorise_name("المندي الذهبي", self.names), (["saudi"], False))  # with ال
+        self.assertEqual(categorise_name("Al Romansiah Kabsa | الرومانسية", self.names), (["saudi"], False))
+        self.assertEqual(categorise_name("بروست الطازج", self.names), (["chicken"], False))
+        self.assertEqual(categorise_name("فول وتميس أبو علي", self.names), (["breakfast"], False))
+        self.assertEqual(categorise_name("Rex Coffee", self.names), ([], False))
+
+    def test_names_never_match_inside_a_word(self):
+        self.assertEqual(categorise_name("فولكس كافيه", self.names), ([], False))
+        self.assertEqual(categorise_name("Mandil Bakery", self.names), ([], False))
+
+    def test_names_block_shisha_and_staff_rooms(self):
+        for name in ("RB Loung | شيشه", "مقهى السماء البيضاء لتقديم المشروبات والشيشة", "Turquoise Cigar Lounge",
+                     "PCSD Staff Lounge", "Shisha Time", "معسل الأمير"):
+            self.assertTrue(categorise_name(name, self.names)[1], name)
+        self.assertFalse(categorise_name("BURGER LOUNGE | برجر لاونج", self.names)[1])
 
     def test_bars_shisha_and_lounges_are_excluded(self):
         for label in ("Dining and Drinking > Bar > Hookah Bar", "Dining and Drinking > Bar > Lounge",
@@ -323,9 +341,14 @@ class Catalogue(unittest.TestCase):
             self.row("d1", "Blocked Café", coffee, lat=24.82),
             self.row("e1", "Yanni Coffee & Lounge", coffee, lat=24.83),
             self.row("f1", "Gym", "Sports and Recreation > Gym", lat=24.84),
+            self.row("g1", "شيشة روبن", coffee, lat=24.85),
+            self.row("h1", "مطعم مندي الشرق", "Dining and Drinking > Restaurant > Middle Eastern Restaurant", lat=24.86),
         ]
-        places, excluded, labels, review = build(rows, self.rules, self.cats, {"d1"})
-        self.assertEqual(sorted(p["source_ids"][0] for p in places), ["a1", "a3", "e1"])
+        places, excluded, labels, review = build(rows, self.rules, self.cats, {"d1"}, self.names)
+        self.assertEqual(sorted(p["source_ids"][0] for p in places), ["a1", "a3", "e1", "h1"])
+        mandi = next(p for p in places if p["source_ids"][0] == "h1")
+        self.assertEqual((mandi["categories"], mandi["ranked_with"]), (["middle-eastern", "saudi"], "restaurant"))
+        self.assertEqual(excluded["shisha / cigar / staff room (by name)"], 1)
         rex = next(p for p in places if p["source_ids"][0] == "a1")
         self.assertEqual(rex["source_ids"], ["a1", "a2"])
         self.assertEqual(rex["categories"], ["coffee", "bakery"])
