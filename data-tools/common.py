@@ -16,7 +16,7 @@ RIYADH_BBOX = {"south": 24.45, "north": 25.05, "west": 46.45, "east": 47.05}
 _ARABIC_DIACRITICS = re.compile(r"[ً-ْٰـ]")  # harakat, dagger alef, tatweel
 _ARABIC_FOLD = str.maketrans({"أ": "ا", "إ": "ا", "آ": "ا", "ٱ": "ا", "ى": "ي", "ة": "ه", "ؤ": "و", "ئ": "ي"})
 _NOISE_RAW = {
-    "cafe", "coffee", "the", "and", "restaurant", "co", "roasters", "roastery", "specialty", "speciality",
+    "cafe", "caffe", "caffee", "coffee", "the", "and", "restaurant", "co", "roasters", "roaster", "roastery", "specialty", "speciality",
     "مقهى", "كافيه", "كافية", "كافي", "قهوة", "مطعم", "محمصة", "روستري", "مختصة", "المختصة", "للقهوة",
 }
 

@@ -13,7 +13,7 @@ from pathlib import Path
 
 import duckdb
 
-from audit import NearbyIndex, best_match, duplicates, name_similarity
+from audit import WEAK_NAME, NearbyIndex, best_match, duplicates, name_similarity
 from common import area_from_address, clean_address, normalize_name, split_bilingual
 from merge_truth import merge
 from fetch_fsq import kind_of
@@ -30,6 +30,20 @@ class Names(unittest.TestCase):
         self.assertEqual(normalize_name("أريج"), normalize_name("اريج"))
         self.assertEqual(normalize_name("مقهى ومحمصة بوسكو"), "بوسكو")
         self.assertEqual(normalize_name("Breehant coffee roastery."), "breehant")
+
+    def test_similarity_on_real_audit_cases(self):
+        # Same place: bilingual source names, branch suffixes, spacing.
+        for a, b in [("Hamra", "Hamra | حمراء"), ("Befine coffee", "BEFINE COFFEE- بي فاين كوفي"), ("COSMO Hittin", "COSMO"),
+                     ("Wacafe Al Narjis", "Wacafe"), ("Brew 92", "Brew92° | ° برو٩٢"), ("By The Way BTW", "BTW By The Way"),
+                     ("نفيس | قهوة مختصة", "NAFEES COFFEE | قهوة نفيس"), ("Hjeen Roaster Saudi 90’s", "Hjeen Roasters")]:
+            self.assertGreaterEqual(name_similarity(a, b), 0.85, (a, b))
+        # Different places that the first audit wrongly matched.
+        for a, b in [("Out of Line Bakery", "Munch Bakery"), ("FOAM | in the Village", "The Village"),
+                     ("Yanni Coffee & lounge", "Coffee & Lounge")]:
+            self.assertLess(name_similarity(a, b), WEAK_NAME, (a, b))  # below the bar even when right next door
+        # Similar-looking names are only accepted practically on top of each other: 239 m away is a different place.
+        latea = {"name": "Latea", "lat": "24.7467", "lng": "46.6600"}
+        self.assertIsNone(best_match({"name": "The gate coffee", "lat": "24.7446", "lng": "46.6601"}, [latea])[0])
 
     def test_similarity(self):
         self.assertEqual(name_similarity("Kiln & Cup", "KILN AND CUP"), 1.0)

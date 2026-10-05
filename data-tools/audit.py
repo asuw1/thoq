@@ -23,28 +23,49 @@ from datetime import date, datetime
 from difflib import SequenceMatcher
 from pathlib import Path
 
-from common import OUT_DIR, haversine_m, normalize_name, read_csv
+from common import OUT_DIR, haversine_m, normalize_name, read_csv, split_bilingual
 
 SOURCES = {"Foursquare OS Places": "fsq_riyadh.csv", "OpenStreetMap": "osm_riyadh.csv"}
 ARABIC = re.compile(r"[؀-ۿ]")
 
 # A candidate counts as the same place if names are near-identical, or similar and close by.
+# Thresholds were tuned on the first real audit (Oct 2026): at 0.6 / 300 m, similar-but-different
+# neighbours were matched ("Out of Line Bakery" → "Munch Bakery"); at 1 km, other branches of chains were.
 STRONG_NAME = 0.85
-WEAK_NAME = 0.6
-NEAR_M = 300
-# With coordinates, a strong name match must still be in the same part of town (chains have many branches).
-SAME_AREA_M = 1000
+WEAK_NAME = 0.65
+# A merely similar name must sit practically on top of the place.
+NEAR_M = 75
+# A near-identical name must still be the same branch, not another one across the district.
+SAME_AREA_M = 300
 
 
-def name_similarity(a: str, b: str) -> float:
+# Words that can't identify a place on their own: "Coffee & Lounge" or "The Village" share them
+# with countless unrelated places.
+GENERIC_WORDS = {"lounge", "bakery", "bar", "house", "kitchen", "village", "garden", "corner", "point",
+                 "station", "spot", "room", "lab", "bistro", "shop", "store", "box", "time", "day"}
+
+
+def _pair_similarity(a: str, b: str) -> float:
     a, b = normalize_name(a), normalize_name(b)
     if not a or not b:
         return 0.0
-    if a == b:
+    if a == b or a.replace(" ", "") == b.replace(" ", ""):  # "brew 92" = "brew92"
         return 1.0
-    if len(a) >= 4 and len(b) >= 4 and (a in b or b in a):
-        return 0.9
+    short, long_ = sorted((set(a.split()), set(b.split())), key=len)
+    # Branch names: "COSMO Hittin" ⊃ "COSMO", "Wacafe Al Narjis" ⊃ "Wacafe". The shared words must
+    # include something distinctive, so "Coffee & Lounge" doesn't match "Yanni Coffee & Lounge".
+    if short <= long_:
+        if any(len(w) >= 3 and w not in GENERIC_WORDS for w in short):
+            return 0.9
+        return 0.5  # only generic words in common: never enough, however close the letters look
     return SequenceMatcher(None, a, b).ratio()
+
+
+def name_similarity(a: str, b: str) -> float:
+    """Best similarity between any version of two names. Sources often store both languages in
+    one field ("Hamra | حمراء"), so each side is also compared by its English and Arabic parts."""
+    variants = lambda s: {v for v in (s, *split_bilingual(s)) if v}  # noqa: E731
+    return max((_pair_similarity(x, y) for x in variants(a) for y in variants(b)), default=0.0)
 
 
 class NearbyIndex:
