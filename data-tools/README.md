@@ -8,6 +8,7 @@ The scripts in this folder:
 | --- | --- |
 | `fetch_fsq.py` | Pulls every café and restaurant in Riyadh from **Foursquare OS Places** (Apache-2.0, we may store it) into `out/fsq_riyadh.csv`. |
 | `fetch_osm.py` | Pulls the same from **OpenStreetMap** (ODbL) into `out/osm_riyadh.csv`. |
+| `fetch_gmaps_list.py` | Exports one shared Google Maps list to `out/gmaps_list.csv` in ground-truth format, optionally with a random sample. |
 | `audit.py` | Compares both with your `ground_truth.csv` and writes `out/report.md`. |
 | `test_tools.py` | Offline tests for all of the above. |
 
@@ -56,6 +57,17 @@ Copy `ground_truth.example.csv` to `ground_truth.csv` and list **30–50 real pl
 - **Arabic names** in `name_ar` where the sign is in Arabic.
 
 Copying coordinates from Google Maps by hand for a private comparison list is fine. What we must not do is bulk-store Google's data in Thoq.
+
+### Using a shared Google Maps list
+
+```powershell
+python fetch_gmaps_list.py "https://maps.app.goo.gl/XXXX" --sample 20
+```
+
+This writes the whole list to `out/gmaps_list.csv` and 20 random places to `out/gmaps_sample.csv`, already in ground-truth columns. Check each sampled place is really open (fix `status`, add `name_ar`), then paste the rows into `ground_truth.csv`.
+
+- **If it says it can't find a list id:** open the link in your browser, wait for the list to load, and pass the full address-bar URL instead.
+- **If it finds no places:** Google changed the format. Re-run with `--dump raw.json` and send me the file.
 
 ### 4. Audit
 

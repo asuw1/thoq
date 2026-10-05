@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import urllib.parse
 from pathlib import Path
 
 import duckdb
@@ -15,6 +16,7 @@ import duckdb
 from audit import best_match, duplicates, name_similarity
 from common import normalize_name
 from fetch_fsq import kind_of
+from fetch_gmaps_list import extract_places, list_id_from, parse_payload, to_rows
 from fetch_osm import parse
 
 HERE = Path(__file__).parent
@@ -106,6 +108,46 @@ class Fetchers(unittest.TestCase):
             self.assertIn("| Foursquare OS Places | 1 / 2 (50%) |", text)
             self.assertIn("| 0 / 1 |", text)  # the closed place is correctly marked closed
             self.assertIn("missing", text)
+
+
+class GoogleList(unittest.TestCase):
+    def test_list_id_from_urls(self):
+        full = "https://www.google.com/maps/@24.7,46.6,12z/data=!4m3!11m2!2sAbC123xyz_-QwErTy!3e3?entry=tts"
+        self.assertEqual(list_id_from(full), "AbC123xyz_-QwErTy")
+        consent = "https://consent.google.com/m?continue=" + urllib.parse.quote(full, safe="")
+        self.assertEqual(list_id_from(consent), "AbC123xyz_-QwErTy")
+        self.assertIsNone(list_id_from("https://maps.app.goo.gl/abc"))
+
+    def test_extracts_places_from_nested_payload(self):
+        place = lambda name, lat, lng, note="": [None, [None, None, "", None, "King Fahd Rd, Riyadh", [None, None, lat, lng], ["1", "2"], "/g/11abc"], name, note]  # noqa: E731
+        payload = [["list-id", ["Riyadh cafés", None], None, None, None, None, None, None, [
+            place("Rex Coffee", 24.8110328, 46.6461137, "good specialty"),
+            place("هجين", 24.7339506, 46.6509861),
+            place("Rex Coffee", 24.8110328, 46.6461137, "good specialty"),  # duplicate
+        ]]]
+        body = ")]}'\n" + json.dumps(payload, ensure_ascii=False)
+        places = extract_places(parse_payload(body))
+        self.assertEqual([p["name"] for p in places], ["Rex Coffee", "هجين"])
+        self.assertEqual(places[0]["address"], "King Fahd Rd, Riyadh")
+        rows = to_rows(places)
+        self.assertEqual(rows[0]["notes"], "good specialty; King Fahd Rd, Riyadh")
+        self.assertEqual((rows[1]["name"], rows[1]["name_ar"]), ("", "هجين"))
+        self.assertEqual(rows[0]["lat"], "24.8110328")
+
+    def test_cli_on_saved_response_with_sample(self):
+        payload = [[None, [None, [None, None, i / 1000 + 24.7, 46.6], None], f"Cafe {i}"] for i in range(30)]
+        with tempfile.TemporaryDirectory() as tmp:
+            raw = Path(tmp) / "raw.json"
+            raw.write_text(")]}'" + json.dumps(payload), encoding="utf-8")
+            out = Path(tmp) / "gmaps_list.csv"
+            cmd = [sys.executable, str(HERE / "fetch_gmaps_list.py"), "--input", str(raw), "--out", str(out), "--sample", "5"]
+            res = subprocess.run(cmd, capture_output=True, text=True, cwd=HERE)
+            self.assertEqual(res.returncode, 0, res.stderr)
+            self.assertEqual(len(list(csv.DictReader(out.open(encoding="utf-8")))), 30)
+            first = (Path(tmp) / "gmaps_sample.csv").read_text(encoding="utf-8")
+            subprocess.run(cmd, capture_output=True, text=True, cwd=HERE)
+            self.assertEqual((Path(tmp) / "gmaps_sample.csv").read_text(encoding="utf-8"), first)  # same seed, same sample
+            self.assertEqual(len(first.strip().splitlines()), 6)
 
 
 if __name__ == "__main__":
