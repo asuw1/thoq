@@ -18,7 +18,7 @@ from common import area_from_address, clean_address, normalize_name, split_bilin
 from merge_truth import merge
 from fetch_fsq import kind_of
 from fetch_gmaps_list import extract_places, list_id_from, parse_payload, to_rows
-from fetch_osm import parse
+from fetch_osm import fetch, parse
 
 HERE = Path(__file__).parent
 
@@ -109,6 +109,33 @@ class Fetchers(unittest.TestCase):
             self.assertIn("| Foursquare OS Places | 1 / 2 (50%) |", text)
             self.assertIn("| 0 / 1 |", text)  # the closed place is correctly marked closed
             self.assertIn("missing", text)
+
+
+class OverpassFallback(unittest.TestCase):
+    def test_tries_next_server_after_a_certificate_error(self):
+        import io
+        import urllib.error
+
+        tried = []
+
+        def fake_open(req, timeout, context):
+            tried.append(req.full_url)
+            if len(tried) == 1:
+                raise urllib.error.URLError("[SSL: CERTIFICATE_VERIFY_FAILED] certificate has expired")
+            return io.BytesIO(b'{"elements": []}')
+
+        self.assertEqual(fetch(["https://a.example/api", "https://b.example/api"], opener=fake_open), {"elements": []})
+        self.assertEqual(tried, ["https://a.example/api", "https://b.example/api"])
+
+    def test_explains_when_every_server_fails(self):
+        import urllib.error
+
+        def always_fail(req, timeout, context):
+            raise urllib.error.URLError("[SSL: CERTIFICATE_VERIFY_FAILED] certificate has expired")
+
+        with self.assertRaises(SystemExit) as ctx:
+            fetch(["https://a.example/api"], opener=always_fail)
+        self.assertIn("date and time", str(ctx.exception.code))
 
 
 class GoogleList(unittest.TestCase):

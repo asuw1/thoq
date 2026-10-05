@@ -15,13 +15,21 @@ from __future__ import annotations
 
 import argparse
 import json
+import ssl
+import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
 
 from common import OUT_DIR, RIYADH_BBOX, write_csv
 
-ENDPOINT = "https://overpass-api.de/api/interpreter"
+# Public Overpass servers, tried in order. They're volunteer-run; any one can be down or misconfigured.
+ENDPOINTS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+]
 AMENITIES = {"cafe": "cafe", "restaurant": "restaurant", "fast_food": "restaurant", "ice_cream": "cafe"}
 SHOPS = {"bakery": "cafe", "coffee": "cafe", "pastry": "cafe", "confectionery": "cafe"}
 
@@ -70,11 +78,40 @@ def parse(payload: dict) -> list[dict]:
     return rows
 
 
-def fetch() -> dict:
+def ssl_context() -> ssl.SSLContext:
+    """Verify certificates against certifi's up-to-date bundle when it's installed.
+    Windows' own certificate store can be stale, which shows up as 'certificate has expired'.
+    Verification is never turned off."""
+    try:
+        import certifi
+
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
+
+
+def fetch(endpoints: list[str] | None = None, opener=urllib.request.urlopen) -> dict:
     data = urllib.parse.urlencode({"data": build_query()}).encode()
-    req = urllib.request.Request(ENDPOINT, data=data, headers={"User-Agent": "thoq-data-audit/0.1"})
-    with urllib.request.urlopen(req, timeout=240) as resp:
-        return json.load(resp)
+    errors = []
+    for url in endpoints or ENDPOINTS:
+        host = urllib.parse.urlparse(url).hostname
+        print(f"Querying {host}…")
+        req = urllib.request.Request(url, data=data, headers={"User-Agent": "thoq-data-audit/0.1"})
+        try:
+            with opener(req, timeout=240, context=ssl_context()) as resp:
+                return json.load(resp)
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
+            reason = getattr(e, "reason", e)
+            print(f"  failed: {reason}")
+            errors.append(f"{host}: {reason}")
+    hint = ""
+    if any("CERTIFICATE" in e.upper() for e in errors):
+        hint = (
+            "\nCertificate errors: check your PC's date and time are correct, then run\n"
+            "  pip install --upgrade certifi\n"
+            "and try again. If a browser also warns on https://overpass-api.de/api/status, that server is at fault."
+        )
+    sys.exit("Every Overpass server failed:\n  " + "\n  ".join(errors) + hint)
 
 
 def main() -> None:
