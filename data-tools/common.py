@@ -5,8 +5,15 @@ from __future__ import annotations
 import csv
 import math
 import re
+import sys
 import unicodedata
 from pathlib import Path
+
+# Windows prints through an old code page (cp1252) when output goes to a file or another program,
+# which can't encode Arabic or "→". Every script imports this module, so fix it once here.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 
 OUT_DIR = Path(__file__).parent / "out"
 
