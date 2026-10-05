@@ -11,6 +11,7 @@ The scripts in this folder:
 | `fetch_gmaps_list.py` | Exports one shared Google Maps list to `out/gmaps_list.csv` in ground-truth format, optionally with a random sample. |
 | `merge_truth.py` | Adds an exported list to `ground_truth.csv`: splits mixed Arabic/English names, cleans notes, fills `area`, removes the template rows and skips places you already have. Backs up first. |
 | `audit.py` | Compares both with your `ground_truth.csv` and writes `out/report.md`. |
+| `import_places.py` | Turns `out/fsq_riyadh.csv` into Thoq's place catalogue in `out/catalogue/`. See [Building the catalogue](#building-the-catalogue). |
 | `test_tools.py` | Offline tests for all of the above. |
 
 `out/` is git-ignored. Fetched data never goes into the repo.
@@ -85,6 +86,35 @@ Every merged place starts as `open`. If you know one has closed, change its `sta
 python audit.py
 start out\report.md
 ```
+
+## Building the catalogue
+
+```powershell
+python import_places.py
+start out\catalogue\summary.md
+```
+
+What it does, in order:
+
+1. **Drops** places on `catalogue/blocklist.csv` and places Foursquare marks closed.
+2. **Excludes** bars, shisha and lounges by category. One matching label is enough, even if the place is also labelled a café.
+3. **Maps** Foursquare labels onto Thoq's categories (`catalogue/categories.csv`). A place can have several: a café that bakes and serves breakfast gets all three. A plain "Restaurant" is kept with no category yet.
+4. **Merges** duplicates (near-identical names within 50 m).
+5. Splits Arabic and English names, cleans the address, and decides **ranked with**: café or restaurant, exactly one.
+
+You edit three files in `catalogue/`, then re-run:
+
+| File | Edit it when |
+| --- | --- |
+| `categories.csv` | You want to rename, add or remove a Thoq category, or change whether it's ranked with cafés or restaurants. |
+| `category_rules.csv` | A Foursquare label lands in the wrong category, or `summary.md` lists a dropped label that belongs in Thoq. The comments at the top explain the syntax. |
+| `blocklist.csv` | One specific place shouldn't be in Thoq. Add its `source_id` (from `review_names.csv` or `places.csv`) and a reason. |
+
+**Check every run:**
+- `summary.md`: counts, the labels that got places excluded, and the labels that were dropped.
+- `review_names.csv`: places whose *name* says lounge or shisha but whose category is fine (e.g. "Yanni Coffee & Lounge"). These are flagged rather than deleted, because many are ordinary cafés. Block the ones that aren't.
+
+`NOTICE.txt` and `LICENSE.txt` are copied next to the data on every run. They must ship wherever the data goes (the Apache-2.0 licence requires it).
 
 ## Reading the report
 

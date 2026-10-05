@@ -19,6 +19,7 @@ from merge_truth import merge
 from fetch_fsq import kind_of
 from fetch_gmaps_list import extract_places, list_id_from, parse_payload, to_rows
 from fetch_osm import fetch, parse
+from import_places import build, categorise, load_categories, load_rules, ranked_with, thoq_id
 
 HERE = Path(__file__).parent
 
@@ -242,6 +243,116 @@ class Cleaning(unittest.TestCase):
         rows = [{"name": "A", "lat": "24.7000", "lng": "46.7000"}, {"name": "B", "lat": "24.7900", "lng": "46.7000"}]
         near = NearbyIndex(rows).near(24.7005, 46.7004)
         self.assertEqual([r["name"] for r in near], ["A"])
+
+
+class Catalogue(unittest.TestCase):
+    """import_places.py: the real rule and category files, not copies, so a bad edit to them fails here."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.rules, cls.cats = load_rules(), load_categories()
+
+    def cat(self, *labels):
+        return categorise(list(labels), self.rules)
+
+    def test_every_rule_names_a_real_category(self):
+        unknown = {c for _, c in self.rules if c not in ("EXCLUDE", "KEEP") and c not in self.cats}
+        self.assertEqual(unknown, set())
+
+    def test_bars_shisha_and_lounges_are_excluded(self):
+        for label in ("Dining and Drinking > Bar > Hookah Bar", "Dining and Drinking > Bar > Lounge",
+                      "Dining and Drinking > Bar", "Dining and Drinking > Bar > Wine Bar"):
+            self.assertTrue(self.cat(label)[1], label)
+
+    def test_exclusion_beats_everything_else(self):
+        cats, excluded, _ = self.cat("Dining and Drinking > Cafe, Coffee, and Tea House > Coffee Shop",
+                                     "Dining and Drinking > Bar > Hookah Bar")
+        self.assertTrue(excluded)
+        self.assertEqual(cats, [])
+
+    def test_whole_words_only(self):
+        self.assertEqual(self.cat("Dining and Drinking > Restaurant > BBQ Joint")[:2], (["grill"], False))
+        self.assertEqual(self.cat("Dining and Drinking > Restaurant > Barbecue Restaurant")[:2], (["grill"], False))
+        self.assertEqual(self.cat("Dining and Drinking > Juice Bar")[:2], (["juice"], False))
+        self.assertEqual(self.cat("Dining and Drinking > Restaurant > Steakhouse")[:2], (["grill"], False))
+
+    def test_most_specific_step_wins(self):
+        self.assertEqual(self.cat("Dining and Drinking > Cafe, Coffee, and Tea House > Tea Room")[0], ["tea"])
+        self.assertEqual(self.cat("Dining and Drinking > Cafe, Coffee, and Tea House > Coffee Shop")[0], ["coffee"])
+        self.assertEqual(self.cat("Dining and Drinking > Cafe, Coffee, and Tea House")[0], ["coffee"])
+        self.assertEqual(self.cat("Dining and Drinking > Restaurant > Middle Eastern Restaurant > Lebanese Restaurant")[0], ["levantine"])
+        self.assertEqual(self.cat("Dining and Drinking > Restaurant > Latin American Restaurant")[0], ["mexican"])
+        self.assertEqual(self.cat("Dining and Drinking > Restaurant > American Restaurant")[0], ["american"])
+
+    def test_several_labels_overlap(self):
+        cats, excluded, kept = self.cat("Dining and Drinking > Cafe, Coffee, and Tea House > Coffee Shop",
+                                        "Dining and Drinking > Bakery", "Dining and Drinking > Breakfast Spot")
+        self.assertEqual((cats, excluded, kept), (["coffee", "bakery", "breakfast"], False, True))
+
+    def test_plain_restaurant_is_kept_without_category(self):
+        self.assertEqual(self.cat("Dining and Drinking > Restaurant"), ([], False, True))
+        self.assertEqual(self.cat("Dining and Drinking > Restaurant > Ethiopian Restaurant"), ([], False, True))
+        self.assertEqual(self.cat("Dining and Drinking > Food Court"), ([], False, False))
+
+    def test_ranked_with(self):
+        self.assertEqual(ranked_with(["coffee", "bakery", "breakfast"], self.cats, ""), "cafe")
+        self.assertEqual(ranked_with(["burgers", "breakfast"], self.cats, ""), "restaurant")
+        self.assertEqual(ranked_with(["coffee", "burgers"], self.cats, "Dining and Drinking > Cafe, Coffee, and Tea House > Café"), "cafe")
+        self.assertEqual(ranked_with(["breakfast"], self.cats, "Dining and Drinking > Breakfast Spot"), "restaurant")
+        self.assertEqual(ranked_with([], self.cats, "Dining and Drinking > Restaurant > Steakhouse"), "restaurant")
+
+    def test_ids_are_stable(self):
+        self.assertEqual(thoq_id("4b0588"), thoq_id("4b0588"))
+        self.assertNotEqual(thoq_id("4b0588"), thoq_id("4b0589"))
+        self.assertRegex(thoq_id("4b0588"), r"^p_[0-9a-f]{12}$")
+
+    def row(self, sid, name, label, lat=24.7, lng=46.7, **extra):
+        return {"source_id": sid, "name": name, "lat": str(lat), "lng": str(lng), "category": label,
+                "address": "", "date_refreshed": "2025-01-01", **extra}
+
+    def test_build_filters_merges_and_flags(self):
+        coffee = "Dining and Drinking > Cafe, Coffee, and Tea House > Coffee Shop"
+        rows = [
+            self.row("a1", "Rex Coffee | مقهى ريكس", coffee),
+            # Same place, older record, 20 m away, one more label: merged into a1.
+            self.row("a2", "Rex Coffee", coffee + "; Dining and Drinking > Bakery", lat=24.70018, date_refreshed="2023-01-01"),
+            # Same chain, other branch 2 km away: kept.
+            self.row("a3", "Rex Coffee", coffee, lat=24.718),
+            self.row("b1", "Smoke House", "Dining and Drinking > Bar > Hookah Bar", lat=24.8),
+            self.row("c1", "Old Place", coffee, lat=24.81, date_closed="2024-03-01"),
+            self.row("d1", "Blocked Café", coffee, lat=24.82),
+            self.row("e1", "Yanni Coffee & Lounge", coffee, lat=24.83),
+            self.row("f1", "Gym", "Sports and Recreation > Gym", lat=24.84),
+        ]
+        places, excluded, labels, review = build(rows, self.rules, self.cats, {"d1"})
+        self.assertEqual(sorted(p["source_ids"][0] for p in places), ["a1", "a3", "e1"])
+        rex = next(p for p in places if p["source_ids"][0] == "a1")
+        self.assertEqual(rex["source_ids"], ["a1", "a2"])
+        self.assertEqual(rex["categories"], ["coffee", "bakery"])
+        self.assertEqual((rex["name_en"], rex["name_ar"], rex["ranked_with"]), ("Rex Coffee", "مقهى ريكس", "cafe"))
+        self.assertEqual(excluded["blocklist"], 1)
+        self.assertEqual(excluded["closed"], 1)
+        self.assertEqual(excluded["bar / shisha / lounge"], 1)
+        self.assertEqual(excluded["not a café or restaurant"], 1)
+        self.assertEqual(excluded["duplicate (merged)"], 1)
+        self.assertEqual(labels["unmapped"]["Sports and Recreation > Gym"], 1)
+        self.assertEqual([p["name_en"] for p in review], ["Yanni Coffee & Lounge"])
+
+    def test_cli_writes_catalogue_with_notice(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "fsq.csv"
+            with src.open("w", encoding="utf-8", newline="") as f:
+                w = csv.DictWriter(f, fieldnames=["source_id", "name", "lat", "lng", "category", "address", "date_refreshed", "date_closed"])
+                w.writeheader()
+                w.writerow(self.row("a1", "Rex Coffee", "Dining and Drinking > Cafe, Coffee, and Tea House > Coffee Shop", date_closed=""))
+            out = Path(tmp) / "catalogue"
+            subprocess.run([sys.executable, str(HERE / "import_places.py"), "--input", str(src), "--out", str(out)],
+                           check=True, capture_output=True, cwd=HERE)
+            for name in ("places.csv", "places.json", "summary.md", "review_names.csv", "NOTICE.txt", "LICENSE.txt"):
+                self.assertTrue((out / name).exists(), name)
+            data = json.loads((out / "places.json").read_text(encoding="utf-8"))
+            self.assertEqual(data[0]["categories"], ["coffee"])
+            self.assertIn("Foursquare", (out / "NOTICE.txt").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,24 @@
+id,label_en,label_ar,ranked_with
+coffee,Coffee,قهوة,cafe
+tea,Tea,شاي,cafe
+bakery,Bakery,مخبز,cafe
+desserts,Desserts,حلويات,cafe
+juice,Juice & smoothies,عصائر,cafe
+breakfast,Breakfast,فطور,neutral
+saudi,Saudi & Yemeni,سعودي ويمني,restaurant
+levantine,Levantine,شامي,restaurant
+middle-eastern,Middle Eastern,شرق أوسطي,restaurant
+turkish,Turkish,تركي,restaurant
+indian,Indian & Pakistani,هندي وباكستاني,restaurant
+japanese,Japanese,ياباني,restaurant
+asian,Asian,آسيوي,restaurant
+italian,Italian & pizza,إيطالي وبيتزا,restaurant
+burgers,Burgers,برجر,restaurant
+chicken,Chicken,دجاج,restaurant
+grill,Grill & steak,مشويات وستيك,restaurant
+seafood,Seafood,مأكولات بحرية,restaurant
+american,American,أمريكي,restaurant
+mexican,Mexican & Latin,مكسيكي ولاتيني,restaurant
+healthy,Healthy & salads,صحي وسلطات,restaurant
+fast-food,Fast food,وجبات سريعة,restaurant
+food-truck,Food truck,فود ترك,neutral

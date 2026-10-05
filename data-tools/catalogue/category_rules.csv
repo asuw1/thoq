@@ -1,0 +1,101 @@
+match,category
+# One rule per line. Foursquare labels are paths, e.g. "Dining and Drinking > Restaurant > Burger Joint".
+# Each rule is a word or phrase matched case-insensitively and as whole words against one step of that path.
+#   steak*     a trailing * matches the start of a word ("Steakhouse")
+#   ^american  a leading ^ matches only at the start of the step ("American Restaurant", not "Latin American")
+# EXCLUDE rules are checked against every step: a place under "Bar" or labelled "Hookah Bar" is dropped,
+# whatever else it is. "Juice Bar" is not a "Bar" step, so it survives.
+# Other rules are checked from the most specific step upwards, and the first step that matches wins, so a
+# "Lebanese Restaurant" under "Middle Eastern Restaurant" is Levantine only. A place with several labels gets
+# the categories of each, so overlap is expected: a café-bakery-breakfast spot gets all three.
+# KEEP keeps a place without giving it a category (a plain "Restaurant"); it's ranked with whatever its label says.
+# Lines starting with # are ignored.
+hookah,EXCLUDE
+shisha,EXCLUDE
+lounge,EXCLUDE
+nightclub,EXCLUDE
+^bar,EXCLUDE
+pub,EXCLUDE
+brewery,EXCLUDE
+winery,EXCLUDE
+wine,EXCLUDE
+beer,EXCLUDE
+cocktail,EXCLUDE
+coffee,coffee
+café,coffee
+cafe,coffee
+espresso,coffee
+tea room,tea
+bubble tea,tea
+bakery,bakery
+donut,bakery
+bagel,bakery
+pastry,bakery
+patisserie,bakery
+dessert*,desserts
+ice cream,desserts
+frozen yogurt,desserts
+chocolate,desserts
+cupcake,desserts
+creperie,desserts
+waffle,desserts
+juice,juice
+smoothie,juice
+breakfast,breakfast
+brunch,breakfast
+saudi,saudi
+yemeni,saudi
+arabian,saudi
+kabsa,saudi
+mandi,saudi
+lebanese,levantine
+syrian,levantine
+palestinian,levantine
+jordanian,levantine
+falafel,levantine
+shawarma,levantine
+middle eastern,middle-eastern
+egyptian,middle-eastern
+iraqi,middle-eastern
+moroccan,middle-eastern
+turkish,turkish
+indian,indian
+pakistani,indian
+afghan,indian
+japanese,japanese
+sushi,japanese
+ramen,japanese
+chinese,asian
+korean,asian
+thai,asian
+vietnamese,asian
+filipino,asian
+asian,asian
+italian,italian
+pizz*,italian
+pasta,italian
+burger*,burgers
+chicken,chicken
+wings,chicken
+steak*,grill
+bbq,grill
+barbecue,grill
+grill,grill
+kebab,grill
+seafood,seafood
+fish,seafood
+^american,american
+diner,american
+mexican,mexican
+latin american,mexican
+salad,healthy
+vegetarian,healthy
+vegan,healthy
+health food,healthy
+poke,healthy
+fast food,fast-food
+food truck,food-truck
+restaurant,KEEP
+bistro,KEEP
+snack place,KEEP
+cafeteria,KEEP
