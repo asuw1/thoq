@@ -15,7 +15,7 @@ RIYADH_BBOX = {"south": 24.45, "north": 25.05, "west": 46.45, "east": 47.05}
 
 _ARABIC_DIACRITICS = re.compile(r"[ً-ْٰـ]")  # harakat, dagger alef, tatweel
 _ARABIC_FOLD = str.maketrans({"أ": "ا", "إ": "ا", "آ": "ا", "ٱ": "ا", "ى": "ي", "ة": "ه", "ؤ": "و", "ئ": "ي"})
-_NOISE_RAW = {"cafe", "coffee", "the", "and", "restaurant", "co", "roasters", "مقهى", "كافيه", "قهوة", "مطعم"}
+_NOISE_RAW = {"cafe", "coffee", "the", "and", "restaurant", "co", "roasters", "roastery", "مقهى", "كافيه", "كافي", "قهوة", "مطعم", "محمصة", "روستري"}
 
 
 def _fold(s: str) -> str:
@@ -34,7 +34,8 @@ def normalize_name(name: str) -> str:
         return ""
     s = _fold(name)
     s = re.sub(r"^ال(?=\S{3,})", "", s)  # leading Arabic definite article
-    words = [w for w in re.split(r"[^\w]+", s) if w and w not in _NOISE_WORDS]
+    # Arabic joins "and" onto the next word ("ومحمصة" = "and roastery"), so check without a leading و too.
+    words = [w for w in re.split(r"[^\w]+", s) if w and w not in _NOISE_WORDS and not (w.startswith("و") and w[1:] in _NOISE_WORDS)]
     return " ".join(words)
 
 

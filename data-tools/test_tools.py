@@ -25,6 +25,8 @@ class Names(unittest.TestCase):
         self.assertEqual(normalize_name("Nabta Café"), "nabta")
         self.assertEqual(normalize_name("مقهى نَبْتَة"), normalize_name("نبته"))
         self.assertEqual(normalize_name("أريج"), normalize_name("اريج"))
+        self.assertEqual(normalize_name("مقهى ومحمصة بوسكو"), "بوسكو")
+        self.assertEqual(normalize_name("Breehant coffee roastery."), "breehant")
 
     def test_similarity(self):
         self.assertEqual(name_similarity("Kiln & Cup", "KILN AND CUP"), 1.0)
