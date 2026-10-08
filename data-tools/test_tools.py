@@ -15,6 +15,7 @@ import duckdb
 
 from audit import WEAK_NAME, NearbyIndex, best_match, duplicates, name_similarity
 from common import area_from_address, clean_address, normalize_name, split_bilingual
+from load_places import rows_for_db
 from merge_truth import merge
 from fetch_fsq import kind_of
 from fetch_gmaps_list import extract_places, list_id_from, parse_payload, to_rows
@@ -376,6 +377,18 @@ class Catalogue(unittest.TestCase):
             data = json.loads((out / "places.json").read_text(encoding="utf-8"))
             self.assertEqual(data[0]["categories"], ["coffee"])
             self.assertIn("Foursquare", (out / "NOTICE.txt").read_text(encoding="utf-8"))
+
+
+class Loader(unittest.TestCase):
+    def test_rows_for_db(self):
+        place = {"id": "p_1", "source": "foursquare", "source_ids": "a1|a2", "name_en": "Rex", "name_ar": "", "ranked_with": "cafe",
+                 "lat": "24.7", "lng": "46.7", "area": "", "address": "", "tel": "", "website": "", "instagram": "",
+                 "refreshed": "", "categories": "coffee|bakery"}
+        row = rows_for_db([place])[0]
+        self.assertEqual(row[2], ["a1", "a2"])
+        self.assertEqual((row[5], row[6], row[13], row[14]), ("cafe", 24.7, None, "coffee|bakery"))
+        with self.assertRaises(SystemExit):
+            rows_for_db([{**place, "ranked_with": "neutral"}])
 
 
 if __name__ == "__main__":

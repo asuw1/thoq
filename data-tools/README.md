@@ -12,6 +12,7 @@ The scripts in this folder:
 | `merge_truth.py` | Adds an exported list to `ground_truth.csv`: splits mixed Arabic/English names, cleans notes, fills `area`, removes the template rows and skips places you already have. Backs up first. |
 | `audit.py` | Compares both with your `ground_truth.csv` and writes `out/report.md`. |
 | `import_places.py` | Turns `out/fsq_riyadh.csv` into Thoq's place catalogue in `out/catalogue/`. See [Building the catalogue](#building-the-catalogue). |
+| `load_places.py` | Loads `out/catalogue/` into the Supabase database. See [`supabase/README.md`](../supabase/README.md). |
 | `test_tools.py` | Offline tests for all of the above. |
 
 `out/` is git-ignored. Fetched data never goes into the repo.
